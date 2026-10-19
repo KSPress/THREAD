@@ -663,6 +663,7 @@ button.dye:hover {
 
 /* Rail — the black floating spine from the reference sidebar. */
 .rail {
+  position: relative;
   grid-row: 1;
   display: flex;
   flex-direction: column;
@@ -3754,5 +3755,225 @@ button.dye:hover {
 @media (hover: none) {
   .heat__tip {
     display: none;
+  }
+}
+
+/* ================================================================ */
+/* Corner styles — Make it yours → Window corners                    */
+/*   round     the default radii defined above                       */
+/*   square    modern square cuts                                    */
+/*   diagonal  chamfered corners: native `corner-shape: bevel` where */
+/*             supported, an octagonal clip-path elsewhere           */
+/* Things that are circles by nature (orb, knobs, swatches, dots)    */
+/* are never listed here, so they stay round.                        */
+/* ================================================================ */
+:root {
+  --cut-l: 14px;
+  --cut-m: 8px;
+  --cut-s: 5px;
+}
+
+/* --- Square ------------------------------------------------------ */
+:root[data-corners='square'] :is(
+    .card, .tiles, .tile, .folder-card, .folder-card__sky, .folder-card__body, .folder-card__body::before, .folder-card__body::after,
+    .rail, .spool, .module, .editor-card, .tapestry, .reader, .tt, .thread-tile, .crumbs, .toolbar-group, .section-head,
+    .pop, .suggest, .hud-card, .ms-card, .backlink, .agenda__date, .agenda__item, .stat, .key, .input, .welcome__opt,
+    .backdrop-pick button, .pinboard-block__preview, .bubble, .bubble button, .hl-toolbar, .hl-item, .tree-row, .suggest__item,
+    .palette__item, .heat__tip, .toast, .btn, .chip-btn, .icon-btn, .rail__btn, .dye, .seg, .seg button, .roles button,
+    .remind-chips button, .gcal-pill, .agenda__when, .tt__type, .tt__x, .tt__newrow, .ms-card__move button, .toggle, .toggle span,
+    .stitch, .spool__search, .spool__search kbd, .heat__cell, .heat__legend, .suggest__glyph, .tree-row input, .tree-row__more,
+    .prop__del, .impact__nav button, .pdf-page, .pdf-page canvas, .preview-page, .pinboard-block__svg, .scrim-tap,
+    .thread-editor blockquote, .thread-editor pre, .thread-editor code, .thread-editor mark, .thread-editor hr,
+    .thread-editor table, .vault-image img, .thread-editor ul[data-type='taskList'] input[type='checkbox'], .rail__btn .tip,
+    .impact__stack > div, .welcome__card, .settings, .palette
+  ) {
+  border-radius: 0 !important;
+}
+:root[data-corners='square'] .rail__btn.is-on::after,
+:root[data-corners='square'] .tree-row.is-active::before,
+:root[data-corners='square'] .thread-editor blockquote::before {
+  border-radius: 0;
+}
+
+/* --- Diagonal: native bevels ------------------------------------- */
+@supports (corner-shape: bevel) {
+  :root[data-corners='diagonal'] :is(
+      .card, .tiles, .folder-card, .rail, .spool, .module, .editor-card, .tapestry, .reader, .tt, .thread-tile,
+      .welcome__card, .settings, .palette
+    ) {
+    border-radius: var(--cut-l) !important;
+    corner-shape: bevel;
+  }
+  :root[data-corners='diagonal'] :is(
+      .tile, .folder-card__sky, .crumbs, .toolbar-group, .section-head, .pop, .suggest, .hud-card, .ms-card, .backlink,
+      .agenda__date, .agenda__item, .stat, .key, .input, .welcome__opt, .backdrop-pick button, .pinboard-block__preview,
+      .bubble, .hl-toolbar, .hl-item, .tree-row, .suggest__item, .palette__item, .heat__tip, .toast, .impact__stack > div,
+      .thread-editor blockquote, .thread-editor pre, .vault-image img, .preview-page, .pdf-page
+    ) {
+    border-radius: var(--cut-m) !important;
+    corner-shape: bevel;
+  }
+  :root[data-corners='diagonal'] .folder-card__body {
+    border-radius: 0 var(--cut-l) var(--cut-l) var(--cut-l) !important;
+    corner-shape: bevel;
+  }
+  :root[data-corners='diagonal'] .folder-card__body::before {
+    border-radius: var(--cut-l) 0 0 0 !important;
+    corner-shape: bevel;
+  }
+  :root[data-corners='diagonal'] .folder-card__body::after {
+    border-radius: 0 var(--cut-m) 0 0 !important;
+    corner-shape: bevel;
+  }
+  :root[data-corners='diagonal'] :is(
+      .btn, .chip-btn, .icon-btn, .rail__btn, .dye, .seg, .seg button, .roles button, .remind-chips button, .gcal-pill,
+      .agenda__when, .tt__type, .tt__x, .ms-card__move button, .toggle, .toggle span, .stitch, .spool__search,
+      .spool__search kbd, .suggest__glyph, .tree-row__more, .prop__del, .impact__nav button, .bubble button,
+      .thread-editor code, .thread-editor table, .rail__btn .tip
+    ) {
+    border-radius: var(--cut-s) !important;
+    corner-shape: bevel;
+  }
+  :root[data-corners='diagonal'] :is(.heat__cell, .heat__legend) {
+    border-radius: 0 !important;
+  }
+}
+
+/* --- Diagonal: clip-path fallback (Safari / WebKit) -------------- */
+@supports not (corner-shape: bevel) {
+  :root[data-corners='diagonal'] :is(
+      .card, .tiles, .folder-card, .rail, .spool, .module, .editor-card, .tapestry, .reader, .thread-tile,
+      .welcome__card, .settings, .palette
+    ) {
+    --cut: var(--cut-l);
+  }
+  :root[data-corners='diagonal'] :is(
+      .tile, .crumbs, .toolbar-group, .section-head, .pop, .suggest, .hud-card, .ms-card, .backlink, .agenda__date,
+      .agenda__item, .stat, .key, .input, .welcome__opt, .backdrop-pick button, .pinboard-block__preview, .bubble,
+      .hl-toolbar, .hl-item, .tree-row, .suggest__item, .palette__item, .toast, .impact__stack > div,
+      .thread-editor blockquote, .thread-editor pre, .vault-image img, .preview-page, .pdf-page
+    ) {
+    --cut: var(--cut-m);
+  }
+  :root[data-corners='diagonal'] :is(
+      .btn, .chip-btn, .icon-btn, .rail__btn, .dye, .seg, .seg button, .roles button, .remind-chips button, .gcal-pill,
+      .agenda__when, .tt__type, .tt__x, .ms-card__move button, .toggle, .stitch, .spool__search, .suggest__glyph,
+      .tree-row__more, .prop__del, .impact__nav button, .bubble button, .thread-editor code
+    ) {
+    --cut: var(--cut-s);
+  }
+  :root[data-corners='diagonal'] :is(.heat__cell, .heat__legend) {
+    --cut: 0px;
+  }
+  :root[data-corners='diagonal'] :is(
+      .card, .tiles, .folder-card, .spool, .module, .editor-card, .tapestry, .reader, .thread-tile, .welcome__card,
+      .settings, .palette, .tile, .crumbs, .toolbar-group, .section-head, .pop, .suggest, .hud-card, .ms-card, .backlink,
+      .agenda__date, .agenda__item, .stat, .key, .input, .welcome__opt, .backdrop-pick button, .pinboard-block__preview,
+      .bubble, .hl-toolbar, .hl-item, .tree-row, .suggest__item, .palette__item, .toast, .impact__stack > div,
+      .thread-editor blockquote, .thread-editor pre, .vault-image img, .preview-page, .pdf-page, .btn, .chip-btn, .icon-btn,
+      .rail__btn, .dye, .seg, .seg button, .roles button, .remind-chips button, .gcal-pill, .agenda__when, .tt__type, .tt__x,
+      .ms-card__move button, .toggle, .stitch, .spool__search, .suggest__glyph, .tree-row__more, .prop__del,
+      .impact__nav button, .bubble button, .thread-editor code, .heat__cell, .heat__legend
+    ) {
+    border-radius: 0 !important;
+    /* Written out here (not as a shared custom property) so var(--cut)
+       resolves per element rather than on :root. */
+    clip-path: polygon(
+      var(--cut) 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% calc(100% - var(--cut)),
+      calc(100% - var(--cut)) 100%, var(--cut) 100%, 0 calc(100% - var(--cut)), 0 var(--cut)
+    );
+  }
+  /* A clipped corner would cut the frame line; redraw it along the bevel.
+     (Only on plain-colored framed surfaces, so no pattern is overwritten.) */
+  :root[data-corners='diagonal'] :is(
+      .card, .pop, .module--frame, .key, .input, .ms-card:not(.ms-card--appendix), .dye, .gcal-pill, .remind-chips button,
+      .roles button, .agenda__date, .toggle, .backlink, .btn:not(.btn--ink):not(.btn--accent):not(.btn--ghost)
+    ) {
+    --edge: var(--frame);
+    --edge-w: var(--frame-w);
+    background-image:
+      linear-gradient(135deg, var(--edge) calc(var(--cut) * 0.7071 + var(--edge-w)), transparent 0),
+      linear-gradient(225deg, var(--edge) calc(var(--cut) * 0.7071 + var(--edge-w)), transparent 0),
+      linear-gradient(315deg, var(--edge) calc(var(--cut) * 0.7071 + var(--edge-w)), transparent 0),
+      linear-gradient(45deg, var(--edge) calc(var(--cut) * 0.7071 + var(--edge-w)), transparent 0);
+    background-origin: border-box;
+  }
+  /* !important: the rule above has higher specificity through its :not(). */
+  :root[data-corners='diagonal'] :is(.card--soft, .key, .input, .ms-card) {
+    --edge: var(--line-strong) !important;
+    --edge-w: 1.5px !important;
+  }
+  :root[data-corners='diagonal'] :is(.dye, .gcal-pill, .remind-chips button, .roles button, .agenda__date, .backlink, .btn) {
+    --edge: var(--line-strong) !important;
+    --edge-w: 1.5px !important;
+  }
+  :root[data-corners='diagonal'] .dye {
+    --edge: color-mix(in srgb, var(--c) 45%, transparent) !important;
+  }
+  :root[data-corners='diagonal'] .toggle {
+    --edge: var(--text) !important;
+    --edge-w: 1.5px !important;
+  }
+  :root[data-corners='diagonal'] :is(.key.is-on, .remind-chips button.is-on, .roles button.is-on, .dye.is-on) {
+    background-image: none;
+  }
+  /* The rail's tooltips stick out of it, so bevel a backing layer instead of the rail. */
+  :root[data-corners='diagonal'] .rail {
+    border-radius: 0 !important;
+    background: transparent;
+    box-shadow: none;
+    filter: drop-shadow(0 18px 24px rgba(0, 0, 0, 0.25));
+  }
+  :root[data-corners='diagonal'] .rail::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: var(--rail);
+    --cut: var(--cut-l);
+    clip-path: polygon(
+      var(--cut) 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% calc(100% - var(--cut)),
+      calc(100% - var(--cut)) 100%, var(--cut) 100%, 0 calc(100% - var(--cut)), 0 var(--cut)
+    );
+  }
+  /* Tables host a column menu that must not be clipped. */
+  :root[data-corners='diagonal'] .tt {
+    border-radius: 0 !important;
+  }
+}
+
+.corner-pick {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.corner-pick__opt {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  min-height: 64px;
+}
+.corner-pick__opt svg {
+  flex: none;
+}
+.corner-pick__opt span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.corner-pick__opt b {
+  font-family: var(--font-body);
+  font-size: 13px;
+}
+.corner-pick__opt small {
+  font-weight: 500;
+  font-size: 11px;
+  opacity: 0.65;
+}
+@media (max-width: 560px) {
+  .corner-pick {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

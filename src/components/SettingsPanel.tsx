@@ -1,6 +1,6 @@
 // "Make your THREAD your own": backgrounds, blur, fonts, palettes, the Loom.
 import { useStore } from '../core/store'
-import { DEFAULT_SETTINGS, PALETTES, useSettings, type BackdropKind, type FontChoice, type PaletteId, type ThemeMode } from '../core/settings'
+import { DEFAULT_SETTINGS, PALETTES, useSettings, type BackdropKind, type CornerStyle, type FontChoice, type PaletteId, type ThemeMode } from '../core/settings'
 import { closeVault } from '../core/boot'
 import { BackdropThumb } from './Backdrop'
 import { Icon } from './Icon'
@@ -21,6 +21,31 @@ const FONTS: { id: FontChoice; label: string }[] = [
   { id: 'literata', label: 'Literata' },
   { id: 'mono', label: 'Mono' },
 ]
+// Preview shapes: an outer frame and an inner tile, each drawn in the corner style.
+const CORNERS: { id: CornerStyle; label: string; hint: string; path: string; inner: string }[] = [
+  {
+    id: 'round',
+    label: 'Radial',
+    hint: 'Soft rounded corners',
+    path: 'M12 3h40a9 9 0 0 1 9 9v20a9 9 0 0 1-9 9H12a9 9 0 0 1-9-9V12a9 9 0 0 1 9-9z',
+    inner: 'M15 11h14a4 4 0 0 1 4 4v14a4 4 0 0 1-4 4H15a4 4 0 0 1-4-4V15a4 4 0 0 1 4-4z',
+  },
+  {
+    id: 'diagonal',
+    label: 'Diagonal',
+    hint: 'Chamfered, panel-cut edges',
+    path: 'M12 3h40l9 9v20l-9 9H12l-9-9V12z',
+    inner: 'M15 11h14l4 4v14l-4 4H15l-4-4V15z',
+  },
+  {
+    id: 'square',
+    label: 'Square',
+    hint: 'Modern sharp cuts',
+    path: 'M3 3h58v38H3z',
+    inner: 'M11 11h22v22H11z',
+  },
+]
+
 const ACCENTS = ['#FF5F45', '#E8772E', '#1FA3E0', '#6D5BD0', '#22A04A', '#F2B33D', '#303830', '#C98BB9']
 const TINTS = ['#2f5784', '#3f6e73', '#5b4a7a', '#7a4f3a', '#344034', '#1f2a44']
 
@@ -104,6 +129,28 @@ export function SettingsPanel() {
             <button className="btn btn--ghost" onClick={uploadBackground}>
               <Icon name="upload" size={14} /> Upload background
             </button>
+          </div>
+
+          <h3>Window corners</h3>
+          <div className="corner-pick" role="radiogroup" aria-label="Window corners">
+            {CORNERS.map((c) => (
+              <button
+                key={c.id}
+                role="radio"
+                aria-checked={st.corners === c.id}
+                className={'key corner-pick__opt' + (st.corners === c.id ? ' is-on' : '')}
+                onClick={() => st.set({ corners: c.id })}
+              >
+                <svg viewBox="0 0 64 44" width="64" height="44" aria-hidden>
+                  <path d={c.path} fill="currentColor" fillOpacity="0.14" stroke="currentColor" strokeWidth="2.5" strokeLinejoin={c.id === 'round' ? 'round' : 'miter'} />
+                  <path d={c.inner} fill="currentColor" fillOpacity="0.35" />
+                </svg>
+                <span>
+                  <b>{c.label}</b>
+                  <small>{c.hint}</small>
+                </span>
+              </button>
+            ))}
           </div>
 
           <div className="settings__grid">

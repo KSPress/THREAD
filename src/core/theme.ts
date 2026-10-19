@@ -22,6 +22,7 @@ export function useApplyTheme() {
   useEffect(() => {
     const root = document.documentElement
     root.dataset.theme = dark ? 'dark' : 'light'
+    root.dataset.corners = s.corners
     root.style.setProperty('--accent', s.accent)
     root.style.setProperty('--font-body', FONT_STACKS[s.bodyFont])
     root.style.setProperty('--font-editor', FONT_STACKS[s.bodyFont])
@@ -30,5 +31,5 @@ export function useApplyTheme() {
     root.style.setProperty('--glass', String(s.glass / 100))
     root.style.setProperty('--editor-w', `${s.editorWidth}px`)
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#111412' : '#303830')
-  }, [dark, s.accent, s.bodyFont, s.displayFont, s.blur, s.glass, s.editorWidth])
+  }, [dark, s.corners, s.accent, s.bodyFont, s.displayFont, s.blur, s.glass, s.editorWidth])
 }

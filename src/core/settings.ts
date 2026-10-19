@@ -5,6 +5,7 @@ export type ThemeMode = 'light' | 'dark' | 'auto'
 export type BackdropKind = 'halftone' | 'pixel' | 'aurora' | 'paper' | 'image'
 export type FontChoice = 'inter' | 'jost' | 'literata' | 'mono'
 export type PaletteId = 'earth' | 'signal' | 'loom'
+export type CornerStyle = 'round' | 'diagonal' | 'square'
 
 export interface Settings {
   theme: ThemeMode
@@ -21,6 +22,8 @@ export interface Settings {
   bodyFont: FontChoice
   displayFont: FontChoice
   palette: PaletteId
+  /** Window/card corners: radial (rounded), diagonal (chamfered) or square cut. */
+  corners: CornerStyle
   accent: string
   editorWidth: number
   loomUrl: string
@@ -49,6 +52,7 @@ export const DEFAULT_SETTINGS: Settings = {
   bodyFont: 'inter',
   displayFont: 'jost',
   palette: 'earth',
+  corners: 'round',
   accent: '#FF5F45',
   editorWidth: 760,
   loomUrl: '',

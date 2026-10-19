@@ -43,6 +43,7 @@ A local-first, Core/Host workspace for worldbuilders and writers. It takes Notio
   - Sky tint, radial-blur intensity, card opacity and film grain.
   - Writing and display fonts (Inter, Jost, Literata, JetBrains Mono).
   - Accent color, light/dark/auto theme, and three Dye palettes taken from the reference boards (Earth, Signal, Loom).
+  - Window corners: **Radial** (rounded, the default), **Diagonal** (chamfered) or **Square** (sharp modern cuts), applied to every panel, card, button and chip. Diagonal uses native CSS `corner-shape: bevel` where the browser supports it (Chrome, Edge, the Windows app) and a clip-path fallback elsewhere (Safari, iPad, Linux/macOS app).
 - **Deadlines and reminders**:
   - Set a date (and optionally a time) in the Stitching panel's Deadline module. It is stored as `deadline:` / `remind:` in the frontmatter.
   - Or write a dated to-do anywhere: `- [ ] Draft chapter 📅 2026-11-01 ⏰ 14:30`. This is the Obsidian Tasks syntax; type `/due` to insert one.

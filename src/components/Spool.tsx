@@ -1,5 +1,6 @@
 // The Spool: floating left sidebar with the nested Project tree and Dyes.
 import { useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { folderNote, useStore, type FileInfo, useDyeColor } from '../core/store'
 import { basename, dirname, extname, join } from '../core/paths'
 import { Icon } from './Icon'
@@ -385,7 +386,8 @@ function ContextMenu({
     }
   }, [onClose])
   const dir = !node ? '' : node.file.kind === 'folder' ? node.path : dirname(node.path)
-  return (
+  // Portaled: the Spool's backdrop-filter (and clipped corners) would trap a fixed menu inside it.
+  return createPortal(
     <div className="ctx pop" style={{ left: Math.min(x, innerWidth - 210), top: Math.min(y, innerHeight - 240) }}>
       <button onClick={() => onNewThread(dir)}>
         <Icon name="canvas" size={15} /> New Thread here
@@ -414,7 +416,8 @@ function ContextMenu({
           </button>
         </>
       )}
-    </div>
+    </div>,
+    document.body,
   )
 }
 
