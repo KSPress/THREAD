@@ -1,0 +1,15 @@
+# Run the Loom (Host) on a home server:
+#   LOOM_TOKEN=change-me docker compose up -d
+# Then in THREAD: Settings → The Loom → http://<server>:7878 + the same token.
+services:
+  loom:
+    build:
+      context: .
+      dockerfile: loom/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "7878:7878"
+    environment:
+      LOOM_TOKEN: ${LOOM_TOKEN:?set LOOM_TOKEN}
+    volumes:
+      - ./loom-data/vault:/vault
