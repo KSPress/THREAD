@@ -38,9 +38,18 @@ jobs:
 
       - run: npm ci
 
+      - name: Locate the Android NDK
+        run: |
+          NDK="${ANDROID_NDK_LATEST_HOME:-}"
+          if [ -z "$NDK" ] || [ ! -d "$NDK" ]; then NDK=$(ls -d "$ANDROID_HOME"/ndk/* 2>/dev/null | sort -V | tail -1); fi
+          if [ -z "$NDK" ]; then
+            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.2.12479018" > /dev/null
+            NDK="$ANDROID_HOME/ndk/27.2.12479018"
+          fi
+          echo "Using NDK at $NDK"
+          echo "NDK_HOME=$NDK" >> "$GITHUB_ENV"
+
       - name: Generate the Android project
-        env:
-          NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
         run: |
           npx tauri android init --ci
           npx tauri icon src-tauri/app-icon.png
@@ -49,8 +58,6 @@ jobs:
             src-tauri/gen/android/app/src/main/AndroidManifest.xml
 
       - name: Build APK
-        env:
-          NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
         run: npx tauri android build --apk --target aarch64 --target armv7 --target x86_64
 
       - name: Sign APK
