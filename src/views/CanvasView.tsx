@@ -1,10 +1,15 @@
-import { useMemo } from 'react'
+import { lazy, Suspense, useMemo, useState } from 'react'
 import { Icon } from '../components/Icon'
+import { ThreadIcon } from '../components/ThreadIcon'
+import { ThreadStylePop } from '../components/ThreadStyle'
+import { parseIcon, threadColor } from '../core/appearance'
 import { DyeBadge } from '../components/DyeBadge'
-import { folderNote, useStore } from '../core/store'
+import { folderNote, useDyeColor, useStore } from '../core/store'
 import { basename, dirname } from '../core/paths'
 import { saveFile } from '../core/platform'
 import { ThreadEditor } from '../editor/ThreadEditor'
+
+const CordView = lazy(() => import('../cord/CordView'))
 
 export function CanvasView() {
   const active = useStore((s) => s.active)
@@ -16,6 +21,9 @@ export function CanvasView() {
   const open = useStore((s) => s.open)
   const setView = useStore((s) => s.setView)
   const createThread = useStore((s) => s.createThread)
+  const createSubThread = useStore((s) => s.createSubThread)
+  const dyeColor = useDyeColor()
+  const [stylePop, setStylePop] = useState<{ rect: DOMRect; tab: 'icon' | 'color' | 'background' } | null>(null)
 
   const crumbs = useMemo(() => {
     if (!active) return []
@@ -25,6 +33,9 @@ export function CanvasView() {
       return { dir, name: basename(dir), note: folderNote(dir, threads) }
     })
   }, [active, threads])
+
+  const hasIcon = !!thread && !!parseIcon(thread.frontmatter.icon)
+  const tint = thread ? threadColor(thread.frontmatter, thread.dyes, dyeColor) : undefined
 
   if (!active || !thread) {
     return (
@@ -63,6 +74,7 @@ export function CanvasView() {
             </span>
           ))}
           <b>{thread.name}</b>
+          {thread.kind === 'cord' && <span className="cord-badge">Cord</span>}
         </div>
         <span className="spacer" />
         <div className="toolbar-group">
@@ -84,8 +96,51 @@ export function CanvasView() {
           </button>
         </div>
       </div>
+      {thread.kind === 'cord' ? (
+        <Suspense fallback={<div className="cord-loading muted">Threading the Cord…</div>}>
+          <CordView path={active} />
+        </Suspense>
+      ) : (
       <div className="canvas-scroll">
-        <article className="editor-card">
+        <article
+          className="editor-card"
+          data-tinted={tint ? '' : undefined}
+          style={tint ? ({ ['--thread-c' as any]: tint } as React.CSSProperties) : undefined}
+        >
+          <div className="thread-head">
+            {hasIcon && (
+              <button
+                className="thread-head__icon"
+                title="Change icon"
+                onClick={(e) => setStylePop({ rect: e.currentTarget.getBoundingClientRect(), tab: 'icon' })}
+              >
+                <ThreadIcon thread={thread} size={38} />
+              </button>
+            )}
+            <div className="thread-head__actions">
+              {!hasIcon && (
+                <button className="chip-btn" onClick={(e) => setStylePop({ rect: e.currentTarget.getBoundingClientRect(), tab: 'icon' })}>
+                  <Icon name="image" size={12} /> Add icon
+                </button>
+              )}
+              <button className="chip-btn" onClick={(e) => setStylePop({ rect: e.currentTarget.getBoundingClientRect(), tab: 'color' })}>
+                <Icon name="dye" size={12} /> Style
+              </button>
+              <button className="chip-btn" onClick={(e) => setStylePop({ rect: e.currentTarget.getBoundingClientRect(), tab: 'background' })}>
+                <Icon name="layers" size={12} /> Background
+              </button>
+              <button
+                className="chip-btn"
+                onClick={async () => {
+                  const name = prompt('Name the sub-thread', 'Untitled')
+                  if (name) open(await createSubThread(active, name, { stitch: true }))
+                }}
+              >
+                <Icon name="plus" size={12} /> Sub-thread
+              </button>
+            </div>
+          </div>
+          {stylePop && <ThreadStylePop path={active} anchor={stylePop.rect} initialTab={stylePop.tab} onClose={() => setStylePop(null)} />}
           {thread.dyes.length > 0 && (
             <div className="editor-card__dyes">
               {thread.dyes.map((d) => (
@@ -96,6 +151,7 @@ export function CanvasView() {
           <ThreadEditor path={active} />
         </article>
       </div>
+      )}
     </div>
   )
 }

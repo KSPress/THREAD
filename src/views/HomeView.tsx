@@ -3,6 +3,8 @@ import { useMemo, useState } from 'react'
 import { Agenda } from '../components/Agenda'
 import { DyeBadge } from '../components/DyeBadge'
 import { Heatmap } from '../components/Heatmap'
+import { ThreadIcon } from '../components/ThreadIcon'
+import { threadColor } from '../core/appearance'
 import { Icon } from '../components/Icon'
 import { Mark } from '../components/Logo'
 import { folderNote, useStore, type ThreadInfo, useDyeColor } from '../core/store'
@@ -33,7 +35,8 @@ export function HomeView() {
   const list = Object.values(threads)
   const projects = useMemo(() => {
     return Object.values(files)
-      .filter((f) => f.kind === 'folder' && !f.path.includes('/'))
+      // Root folders, minus the ones that hold a Thread's sub-threads.
+      .filter((f) => f.kind === 'folder' && !f.path.includes('/') && !threads[`${f.path}.md`])
       .map((f) => {
         const inside = list.filter((t) => t.path.startsWith(f.path + '/'))
         const note = folderNote(f.path, threads)
@@ -250,12 +253,20 @@ export function HomeView() {
 
 function ThreadGrid({ threads }: { threads: ThreadInfo[] }) {
   const open = useStore((s) => s.open)
+  const dyeColor = useDyeColor()
   if (!threads.length) return <div className="empty-note" style={{ margin: '0 6px 30px' }}>Nothing here yet.</div>
   return (
     <div className="thread-grid">
       {threads.map((t, i) => (
         <button key={t.path} className="thread-tile" onClick={() => open(t.path)} style={{ animationDelay: `${i * 30}ms` }}>
-          <span className="label">{dirname(t.path) || 'vault'}</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span className="thread-tile__icon" style={{ ['--thread-c' as any]: threadColor(t.frontmatter, t.dyes, dyeColor) }}>
+              <ThreadIcon thread={t} size={18} />
+            </span>
+            <span className="label" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {dirname(t.path) || 'vault'}
+            </span>
+          </span>
           <b>{t.title}</b>
           <p>{excerpt(t.body)}</p>
           <div className="thread-tile__foot">

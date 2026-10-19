@@ -1,3 +1,4 @@
+import { dirname } from '../core/paths'
 // Quick switcher + command runner (Ctrl/Cmd+K).
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../core/store'
@@ -31,6 +32,10 @@ function Palette() {
   const items = useMemo<Item[]>(() => {
     const commands: Omit<Item, 'score'>[] = [
       { id: 'c:new', title: 'New Thread', icon: 'plus', run: () => void s.createThread('', 'Untitled').then(s.open) },
+      { id: 'c:cord', title: 'New Cord (word processor)', icon: 'compiler', run: () => void s.createCord('', 'Untitled Cord').then(s.open) },
+      ...(s.active && s.threads[s.active]?.kind === 'thread'
+        ? [{ id: 'c:tocord', title: 'Convert this Thread to a Cord', icon: 'compiler' as const, run: () => void s.createCord(dirname(s.active!), s.threads[s.active!].name, s.active!).then(s.open) }]
+        : []),
       {
         id: 'c:proj',
         title: 'New Project',

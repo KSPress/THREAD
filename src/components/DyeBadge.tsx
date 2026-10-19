@@ -1,6 +1,6 @@
 import { useStore } from '../core/store'
 
-export function DyeBadge({ dye, small, onClick, children }: { dye: string; small?: boolean; onClick?: () => void; children?: React.ReactNode }) {
+export function DyeBadge({ dye, small, onClick, children }: { dye: string; small?: boolean; onClick?: (e?: React.MouseEvent) => void; children?: React.ReactNode }) {
   const color = useStore((s) => s.dyeColors[dye] ?? s.dyeColor(dye))
   const Tag = onClick ? 'button' : 'span'
   return (

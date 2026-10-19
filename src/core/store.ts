@@ -1,6 +1,7 @@
 // The in-memory index of a vault plus every action the UI can take on it.
 import { create } from 'zustand'
 import {
+  normalizeDye,
   dyesOf,
   extractStitches,
   firstHeading,
@@ -14,12 +15,15 @@ import { basename, dirname, isHidden, join, kindOf, META_DIR, safeName, stem, ty
 import { LoomSync, type LoomStatus } from './sync'
 import { PALETTES, useSettings } from './settings'
 import { deviceId, loadActivity, recordActivity, renameActivity } from './activity'
+import { cordToMarkdown, isCordPath, newCord, parseCord, renameStitchTargets, serializeCord } from '../cord/model'
 import type { VaultAdapter, VaultEntry } from './vault'
 
 export type View = 'home' | 'canvas' | 'tapestry' | 'desk' | 'compiler'
 
 export interface ThreadInfo {
   path: string
+  /** 'cord' for word-processor documents (.cord); body is then their Markdown rendering. */
+  kind: 'thread' | 'cord'
   name: string
   title: string
   raw: string
@@ -115,6 +119,13 @@ interface Actions {
   setFrontmatter(path: string, fm: Frontmatter): Promise<void>
   createThread(dir: string, name: string, body?: string, fm?: Frontmatter): Promise<string>
   createProject(name: string, parent?: string): Promise<string>
+  /** A Thread nested under another: stored in a folder named after the parent, next to it. */
+  createSubThread(parent: string, name: string, opts?: { stitch?: boolean }): Promise<string>
+  /** A new Cord (word-processor document); optionally converted from a Thread's content. */
+  createCord(dir: string, name: string, from?: string): Promise<string>
+  renameDye(from: string, to: string): Promise<void>
+  deleteDye(dye: string): Promise<void>
+  toggleDye(path: string, dye: string): Promise<void>
   renamePath(from: string, to: string): Promise<void>
   deletePath(path: string): Promise<void>
   importFiles(dir: string, files: File[]): Promise<string[]>
@@ -261,7 +272,10 @@ export const useStore = create<State & Actions>((set, get) => ({
       files: { ...s.files, [path]: { path, kind: 'thread', size: raw.length, mtime: info.mtime } },
     }))
     recordActivity(path)
-    if (useSettings.getState().loomUrl) await sync?.track(path, raw)
+    if (!useSettings.getState().loomUrl) return
+    // Cords are structured JSON: synced whole (like PDFs), not merged character by character.
+    if (info.kind === 'cord') await sync?.pushAsset(path, new TextEncoder().encode(raw))
+    else await sync?.track(path, raw)
   },
 
   async saveBody(path, body) {
@@ -272,7 +286,11 @@ export const useStore = create<State & Actions>((set, get) => ({
   async setFrontmatter(path, fm) {
     const t = get().threads[path]
     if (!t) return
-    await get().saveThread(path, joinFrontmatter(fm, t.body))
+    if (t.kind === 'cord') {
+      const cord = parseCord(t.raw)
+      cord.meta = Object.fromEntries(Object.entries(fm).filter(([, v]) => v !== undefined))
+      await get().saveThread(path, serializeCord(cord))
+    } else await get().saveThread(path, joinFrontmatter(fm, t.body))
     bump(path)
   },
 
@@ -284,6 +302,90 @@ export const useStore = create<State & Actions>((set, get) => ({
     const content = joinFrontmatter(fm ?? {}, body ?? `# ${base}\n\n`)
     await get().saveThread(path, content)
     return path
+  },
+
+  async createSubThread(parent, name, opts = {}) {
+    const dir = subThreadDir(parent)
+    const adapter = get().adapter!
+    if (!(await adapter.exists(dir))) await adapter.mkdir(dir)
+    const path = await get().createThread(dir, name)
+    if (opts.stitch) {
+      const child = stem(path)
+      if (editorBus.insertStitch && get().active === parent) editorBus.insertStitch(child)
+      else {
+        const t = get().threads[parent]
+        if (t) {
+          await get().saveBody(parent, `${t.body.trimEnd()}\n\n[[${child}]]\n`)
+          bump(parent)
+        }
+      }
+    }
+    await get().refresh()
+    return path
+  },
+
+  async createCord(dir, name, from) {
+    const adapter = get().adapter!
+    const base = safeName(name)
+    let path = join(dir, `${base}.cord`)
+    for (let i = 2; get().files[path] || (await adapter.exists(path)); i++) path = join(dir, `${base} ${i}.cord`)
+    const cord = newCord(base)
+    const src = from ? get().threads[from] : undefined
+    if (src && src.kind === 'thread') {
+      const { markdownToCordDoc } = await import('../cord/convert')
+      cord.doc = await markdownToCordDoc(src.body)
+      cord.meta = { ...src.frontmatter, title: src.title }
+    }
+    await get().saveThread(path, serializeCord(cord))
+    return path
+  },
+
+  async renameDye(from, to) {
+    const a = normalizeDye(from)
+    const b = normalizeDye(to)
+    if (!a || !b || a === b) return
+    for (const t of Object.values(get().threads)) {
+      if (!t.dyes.includes(a)) continue
+      const fm: Frontmatter = { ...t.frontmatter }
+      delete fm.tags
+      fm.dyes = [...new Set(t.dyes.map((d) => (d === a ? b : d)))]
+      await get().setFrontmatter(t.path, fm)
+    }
+    // Keep its color (unless the new name already had one).
+    const colors = { ...get().dyeColors }
+    if (colors[a] && !colors[b]) colors[b] = colors[a]
+    delete colors[a]
+    set({ dyeColors: colors, dyeFilter: get().dyeFilter === a ? b : get().dyeFilter })
+    await get().writeMeta('dyes.json', colors)
+    await rewriteHighlightDyes((d) => (d === a ? b : d))
+    get().notify(`Dye “${a}” is now “${b}”`)
+  },
+
+  async deleteDye(dye) {
+    const a = normalizeDye(dye)
+    for (const t of Object.values(get().threads)) {
+      if (!t.dyes.includes(a)) continue
+      const fm: Frontmatter = { ...t.frontmatter }
+      delete fm.tags
+      const rest = t.dyes.filter((d) => d !== a)
+      fm.dyes = rest.length ? rest : undefined
+      await get().setFrontmatter(t.path, fm)
+    }
+    const colors = { ...get().dyeColors }
+    delete colors[a]
+    set({ dyeColors: colors, dyeFilter: get().dyeFilter === a ? null : get().dyeFilter })
+    await get().writeMeta('dyes.json', colors)
+  },
+
+  async toggleDye(path, dye) {
+    const t = get().threads[path]
+    const d = normalizeDye(dye)
+    if (!t || !d) return
+    const fm: Frontmatter = { ...t.frontmatter }
+    delete fm.tags
+    const next = t.dyes.includes(d) ? t.dyes.filter((x) => x !== d) : [...t.dyes, d]
+    fm.dyes = next.length ? next : undefined
+    await get().setFrontmatter(path, fm)
   },
 
   async createProject(name, parent = '') {
@@ -308,12 +410,25 @@ export const useStore = create<State & Actions>((set, get) => ({
     if (from === to) return
     const isFolder = get().files[from]?.kind === 'folder'
     await adapter.rename(from, to)
+    // A Thread's sub-threads travel with it.
+    if (!isFolder && kindOf(from) === 'thread') {
+      const fromDir = subThreadDir(from)
+      if (get().files[fromDir]?.kind === 'folder') await adapter.rename(fromDir, subThreadDir(to))
+    }
     // Keep Stitches intact: rewrite [[Old]] to [[New]] across the vault.
     if (!isFolder && kindOf(from) === 'thread' && stem(from) !== stem(to)) {
       const oldName = stem(from)
       const newName = stem(to)
       const re = new RegExp(`\\[\\[${escapeRe(oldName)}(?=[#|\\]])`, 'g')
       for (const t of Object.values(get().threads)) {
+        if (t.kind === 'cord') {
+          const cord = parseCord(t.raw)
+          if (t.path !== from && renameStitchTargets(cord.doc, oldName, newName)) {
+            await get().saveThread(t.path, serializeCord(cord))
+            bump(t.path)
+          }
+          continue
+        }
         if (t.path === from || !re.test(t.raw)) continue
         re.lastIndex = 0
         await get().saveThread(t.path, t.raw.replace(re, `[[${newName}`))
@@ -336,6 +451,8 @@ export const useStore = create<State & Actions>((set, get) => ({
   async deletePath(path) {
     const adapter = get().adapter!
     await adapter.remove(path)
+    // Deleting a Thread unravels its sub-threads too.
+    if (kindOf(path) === 'thread' && get().files[subThreadDir(path)]?.kind === 'folder') await adapter.remove(subThreadDir(path))
     for (const p of Object.keys(get().threads)) if (p === path || p.startsWith(path + '/')) await sync?.remove(p)
     const active = get().active
     await get().refresh()
@@ -412,7 +529,7 @@ export const useStore = create<State & Actions>((set, get) => ({
       return
     }
     // Make sure every Thread has a CRDT so the whole vault reaches the Loom.
-    for (const t of Object.values(get().threads)) await sync.track(t.path, t.raw)
+    for (const t of Object.values(get().threads)) if (t.kind === 'thread') await sync.track(t.path, t.raw)
     await sync.connect(loomUrl, loomToken)
     void syncAssets()
   },
@@ -429,10 +546,30 @@ export const useStore = create<State & Actions>((set, get) => ({
 /* ------------------------------------------------------------------ */
 
 export function indexThread(path: string, raw: string, mtime: number): ThreadInfo {
+  if (isCordPath(path)) {
+    const cord = parseCord(raw)
+    const body = cordToMarkdown(cord.doc)
+    const name = stem(path)
+    return {
+      path,
+      kind: 'cord',
+      name,
+      title: (typeof cord.meta.title === 'string' && cord.meta.title) || firstHeading(body) || name,
+      raw,
+      body,
+      head: '',
+      frontmatter: cord.meta,
+      dyes: dyesOf(cord.meta),
+      stitches: extractStitches(body),
+      words: wordCount(body),
+      mtime,
+    }
+  }
   const { frontmatter, body } = splitFrontmatter(raw)
   const name = stem(path)
   return {
     path,
+    kind: 'thread',
     name,
     title: (typeof frontmatter.title === 'string' && frontmatter.title) || firstHeading(body) || name,
     raw,
@@ -457,10 +594,11 @@ export function resolveTarget(
   const asFolder = (p: string) => (files[p]?.kind === 'folder' ? folderNote(p, threads) : p)
   if (files[t]) return asFolder(t)
   if (files[t + '.md']) return t + '.md'
+  if (files[t + '.cord']) return t + '.cord'
   const lower = t.toLowerCase()
   const byName = (p: string) => {
     const b = basename(p).toLowerCase()
-    return b === lower || b === lower + '.md'
+    return b === lower || b === lower + '.md' || b === lower + '.cord'
   }
   const thread = Object.keys(threads).find(byName)
   if (thread) return thread
@@ -477,9 +615,15 @@ export function resolveTarget(
   return null
 }
 
+/** Where a Thread's sub-threads live: `Places/Emberfall.md` → `Places/Emberfall/`. */
+export function subThreadDir(path: string) {
+  return join(dirname(path), stem(path))
+}
+
 export function folderNote(dir: string, threads: Record<string, ThreadInfo>) {
   const name = basename(dir)
-  const candidates = [join(dir, `${name}.md`), join(dir, 'index.md'), join(dir, 'README.md')]
+  // Inside (Project dashboards), or beside it (a Thread with sub-threads).
+  const candidates = [join(dir, `${name}.md`), join(dir, 'index.md'), join(dir, 'README.md'), `${dir}.md`]
   return candidates.find((c) => threads[c]) ?? null
 }
 
@@ -557,7 +701,7 @@ async function syncAssets() {
       }
     }
     for (const f of await s.adapter.list()) {
-      if (f.dir || kindOf(f.path) === 'thread' || f.path.endsWith('recent.json')) continue
+      if (f.dir || (kindOf(f.path) === 'thread' && !isCordPath(f.path)) || f.path.endsWith('recent.json')) continue
       if (isHidden(f.path) && !f.path.startsWith(META_DIR + '/')) continue
       const r = remoteSet.get(f.path)
       if (!r || (r.size !== f.size && f.mtime > r.mtime)) await sync.pushAsset(f.path, await s.adapter.readBinary(f.path))
@@ -582,6 +726,22 @@ function escapeRe(s: string) {
 export const pendingEdits = new Map<string, string>()
 
 /** The live editor, so other panes (the Desk) can stitch into it. */
-export const editorBus: { insertQuote: ((quote: string, stitch: string) => void) | null } = { insertQuote: null }
+export const editorBus: {
+  insertQuote: ((quote: string, stitch: string) => void) | null
+  insertStitch: ((target: string) => void) | null
+} = { insertQuote: null, insertStitch: null }
 
 export type { VaultEntry }
+
+/** Apply a Dye rename/removal to every PDF highlight in the vault. */
+async function rewriteHighlightDyes(map: (d: string) => string) {
+  const s = useStore.getState()
+  if (!s.adapter) return
+  for (const e of await s.adapter.list()) {
+    const m = /^\.thread\/highlights\/(.+)\.json$/.exec(e.path)
+    if (!m) continue
+    const list = await s.highlights(m[1])
+    if (!list.some((h) => map(h.dye) !== h.dye)) continue
+    await s.saveHighlights(m[1], list.map((h) => ({ ...h, dye: map(h.dye) })))
+  }
+}

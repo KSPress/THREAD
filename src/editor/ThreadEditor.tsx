@@ -112,9 +112,11 @@ export function ThreadEditor({ path, onEditor }: { path: string; onEditor?: (e: 
         ])
         .run()
     }
+    editorBus.insertStitch = (target) => editor.chain().focus().insertStitch({ target }).run()
     return () => {
       onEditor?.(null)
       editorBus.insertQuote = null
+      editorBus.insertStitch = null
     }
   }, [editor])
 

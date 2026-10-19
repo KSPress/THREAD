@@ -1,9 +1,12 @@
 // The Spool: floating left sidebar with the nested Project tree and Dyes.
 import { useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { folderNote, useStore, type FileInfo, useDyeColor } from '../core/store'
+import { folderNote, subThreadDir, useStore, type FileInfo, useDyeColor } from '../core/store'
 import { basename, dirname, extname, join } from '../core/paths'
 import { Icon } from './Icon'
+import { DyeEditor, DyePicker } from './DyeEditor'
+import { ThreadIcon } from './ThreadIcon'
+import { ThreadStylePop } from './ThreadStyle'
 import { Logo } from './Logo'
 
 interface TreeNode {
@@ -38,6 +41,11 @@ export function Spool() {
   const [ctx, setCtx] = useState<{ x: number; y: number; node: TreeNode | null } | null>(null)
   const [renaming, setRenaming] = useState<string | null>(null)
   const [dropping, setDropping] = useState(false)
+  const [stylePop, setStylePop] = useState<{ path: string; rect: DOMRect } | null>(null)
+  const [dyePop, setDyePop] = useState<{ path: string; rect: DOMRect } | null>(null)
+  const [dyeEdit, setDyeEdit] = useState<{ dye: string; rect: DOMRect } | null>(null)
+  const [editDyes, setEditDyes] = useState(false)
+  const createSubThread = useStore((s) => s.createSubThread)
 
   useEffect(() => localStorage.setItem(OPEN_KEY, JSON.stringify(openMap)), [openMap])
 
@@ -52,6 +60,13 @@ export function Spool() {
 
   const newThread = async (dir = '') => {
     const p = await createThread(dir, 'Untitled')
+    if (dir) setOpenMap((m) => ({ ...m, [dir]: true }))
+    open(p)
+  }
+  const newCord = async (dir = '') => {
+    const name = prompt('Name the Cord — a Thread with pages, headers, page numbers and footnotes', 'Untitled Cord')
+    if (!name) return
+    const p = await useStore.getState().createCord(dir, name)
     if (dir) setOpenMap((m) => ({ ...m, [dir]: true }))
     open(p)
   }
@@ -99,6 +114,10 @@ export function Spool() {
           <button className="key" onClick={() => void newThread('')}>
             <Icon name="canvas" size={16} />
             New Thread
+          </button>
+          <button className="key" onClick={() => void newCord('')} title="A Thread with a full word processor: pages, headers & footers, page numbers, footnotes">
+            <Icon name="compiler" size={16} />
+            New Cord
           </button>
           <button className="key" onClick={() => void newProject('')}>
             <Icon name="folder" size={16} />
@@ -160,6 +179,12 @@ export function Spool() {
 
           <div className="spool__section">
             <span className="label">[ Dyes ]</span>
+            <span className="spacer" />
+            {dyes.length > 0 && (
+              <button className={'chip-btn' + (editDyes ? ' is-on' : '')} onClick={() => setEditDyes(!editDyes)} title="Rename, recolor or remove Dyes">
+                {editDyes ? 'Done' : 'Edit'}
+              </button>
+            )}
           </div>
           <div className="dye-list">
             {dyes.length === 0 && <span className="empty-note">Add a Dye to any Thread from the Stitching panel.</span>}
@@ -168,8 +193,15 @@ export function Spool() {
                 key={d}
                 className={'dye dye--sm' + (dyeFilter === d ? ' is-on' : '')}
                 style={{ ['--c' as any]: dyeColor(d) }}
-                onClick={() => set({ dyeFilter: dyeFilter === d ? null : d })}
-                title={`${n} Thread${n === 1 ? '' : 's'}`}
+                onClick={(e) =>
+                  editDyes ? setDyeEdit({ dye: d, rect: e.currentTarget.getBoundingClientRect() }) : set({ dyeFilter: dyeFilter === d ? null : d })
+                }
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setDyeEdit({ dye: d, rect: e.currentTarget.getBoundingClientRect() })
+                }}
+                title={editDyes ? `Edit “${d}”` : `${n} Thread${n === 1 ? '' : 's'} · right-click to edit`}
               >
                 {d}
                 <span className="mono" style={{ opacity: 0.6 }}>
@@ -185,10 +217,22 @@ export function Spool() {
           {...ctx}
           onClose={() => setCtx(null)}
           onNewThread={(dir) => void newThread(dir)}
+          onNewCord={(dir) => void newCord(dir)}
           onNewProject={(dir) => void newProject(dir)}
           onRename={(p) => setRenaming(p)}
+          onSubThread={async (p) => {
+            const name = prompt('Name the sub-thread', 'Untitled')
+            if (!name) return
+            setOpenMap((m) => ({ ...m, [p]: true }))
+            open(await createSubThread(p, name))
+          }}
+          onStyle={(p, rect) => setStylePop({ path: p, rect })}
+          onDye={(p, rect) => setDyePop({ path: p, rect })}
         />
       )}
+      {stylePop && <ThreadStylePop path={stylePop.path} anchor={stylePop.rect} onClose={() => setStylePop(null)} />}
+      {dyePop && <DyePicker path={dyePop.path} anchor={dyePop.rect} onClose={() => setDyePop(null)} />}
+      {dyeEdit && <DyeEditor dye={dyeEdit.dye} anchor={dyeEdit.rect} onClose={() => setDyeEdit(null)} />}
     </aside>
   )
 }
@@ -219,7 +263,7 @@ function TreeList(props: {
               setRenaming={props.setRenaming}
               onDrop={props.onDrop}
             />
-            {n.file.kind === 'folder' && isOpen && n.children.length > 0 && (
+            {isOpen && n.children.length > 0 && (
               <div className="tree-children">
                 <TreeList {...props} nodes={n.children} depth={props.depth + 1} />
               </div>
@@ -277,6 +321,8 @@ function Row({
   }
 
   const icon = isFolder ? 'folder' : node.file.kind === 'pdf' || node.file.kind === 'epub' ? 'pdf' : node.file.kind === 'image' ? 'image' : 'file'
+  const isThread = node.file.kind === 'thread'
+  const expandable = isFolder || node.children.length > 0
 
   return (
     <div
@@ -287,7 +333,8 @@ function Row({
       draggable={renaming !== node.path}
       onDragStart={(e) => e.dataTransfer.setData('text/thread-path', node.path)}
       onDragOver={(e) => {
-        if (!isFolder) return
+        // Drop onto a folder to move into it, onto a Thread to nest as a sub-thread.
+        if (!isFolder && !isThread) return
         e.preventDefault()
         e.stopPropagation()
         setOver(true)
@@ -296,6 +343,7 @@ function Row({
       onDrop={(e) => {
         setOver(false)
         if (isFolder) onDrop(e, node.path)
+        else if (isThread && e.dataTransfer.getData('text/thread-path') !== node.path) onDrop(e, subThreadDir(node.path))
       }}
       onClick={() => {
         if (renaming === node.path) return
@@ -311,7 +359,7 @@ function Row({
         onCtx({ x: e.clientX, y: e.clientY, node })
       }}
     >
-      {isFolder ? (
+      {expandable ? (
         <span
           className="chev"
           onClick={(e) => {
@@ -324,7 +372,7 @@ function Row({
       ) : (
         <span style={{ width: 13 }} />
       )}
-      <Icon name={icon} size={15} />
+      {isThread ? <ThreadIcon thread={thread} size={15} /> : <Icon name={icon} size={15} />}
       {renaming === node.path ? (
         <input
           ref={inputRef}
@@ -340,7 +388,7 @@ function Row({
         <span className="name">{node.name}</span>
       )}
       {thread?.dyes[0] && <span className="tree-row__dye" style={{ background: dyeColor(thread.dyes[0]) }} />}
-      {isFolder && <span className="count">{countThreads(node)}</span>}
+      {expandable && <span className="count">{countThreads(node)}</span>}
       <span
         className="tree-row__more"
         role="button"
@@ -363,16 +411,24 @@ function ContextMenu({
   node,
   onClose,
   onNewThread,
+  onNewCord,
   onNewProject,
   onRename,
+  onSubThread,
+  onStyle,
+  onDye,
 }: {
   x: number
   y: number
   node: TreeNode | null
   onClose: () => void
   onNewThread: (dir: string) => void
+  onNewCord: (dir: string) => void
   onNewProject: (dir: string) => void
   onRename: (path: string) => void
+  onSubThread: (path: string) => void
+  onStyle: (path: string, rect: DOMRect) => void
+  onDye: (path: string, rect: DOMRect) => void
 }) {
   const deletePath = useStore((s) => s.deletePath)
   const openDesk = useStore((s) => s.openDesk)
@@ -392,6 +448,9 @@ function ContextMenu({
       <button onClick={() => onNewThread(dir)}>
         <Icon name="canvas" size={15} /> New Thread here
       </button>
+      <button onClick={() => onNewCord(dir)}>
+        <Icon name="compiler" size={15} /> New Cord here
+      </button>
       <button onClick={() => onNewProject(dir)}>
         <Icon name="folder" size={15} /> New Project here
       </button>
@@ -402,6 +461,30 @@ function ContextMenu({
             <button onClick={() => openDesk(node.path)}>
               <Icon name="desk" size={15} /> Open at the Desk
             </button>
+          )}
+          {node.file.kind === 'thread' && (
+            <>
+              <button onClick={() => onSubThread(node.path)}>
+                <Icon name="plus" size={15} /> New sub-thread
+              </button>
+              <button onClick={() => onDye(node.path, new DOMRect(x, y, 0, 0))}>
+                <Icon name="dye" size={15} /> Dye…
+              </button>
+              <button onClick={() => onStyle(node.path, new DOMRect(x, y, 0, 0))}>
+                <Icon name="image" size={15} /> Icon, color &amp; background…
+              </button>
+              {!node.path.endsWith('.cord') && (
+                <button
+                  onClick={async () => {
+                    const s = useStore.getState()
+                    s.open(await s.createCord(dirname(node.path), node.name, node.path))
+                    s.notify(`Made a Cord from “${node.name}” — the Thread is untouched`)
+                  }}
+                >
+                  <Icon name="compiler" size={15} /> Convert to Cord
+                </button>
+              )}
+            </>
           )}
           <button onClick={() => onRename(node.path)}>
             <Icon name="rename" size={15} /> Rename
@@ -429,12 +512,16 @@ function buildTree(files: Record<string, FileInfo>, threads: Record<string, unkn
     const f = files[p]
     nodes.set(p, { path: p, name: f.kind === 'thread' ? basename(p).replace(/\.md$/i, '') : basename(p), file: f, children: [] })
   }
+  // A folder next to a Thread of the same name holds that Thread's sub-threads.
+  const owner = (dir: string) => (files[dir]?.kind === 'folder' && threads[`${dir}.md`] ? nodes.get(`${dir}.md`) : undefined)
   for (const p of paths) {
     const node = nodes.get(p)!
     const parent = dirname(p)
     // A Project's folder note is the Project itself; don't list it twice.
     if (node.file.kind === 'thread' && parent && basename(parent) + '.md' === basename(p) && threads[p]) continue
-    if (parent && nodes.has(parent)) nodes.get(parent)!.children.push(node)
+    if (owner(p)) continue
+    const target = (parent && owner(parent)) || (parent ? nodes.get(parent) : undefined)
+    if (target) target.children.push(node)
     else root.push(node)
   }
   const sort = (list: TreeNode[]) => {

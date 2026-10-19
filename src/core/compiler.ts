@@ -57,7 +57,8 @@ export function buildSections(ms: Manuscript, threads: Record<string, ThreadInfo
   for (const item of ms.items) {
     const t = threads[item.path]
     if (!t) continue
-    let md = stripThreadSyntax(t.raw, ms)
+    // Cords contribute their Markdown rendering (rich layout is for the Cord's own export).
+    let md = stripThreadSyntax(t.kind === 'cord' ? t.body : t.raw, ms)
     // Lift a leading H1 into the section title so we control heading levels.
     let title = t.title
     const h1 = md.match(/^#\s+(.+)\n?/)

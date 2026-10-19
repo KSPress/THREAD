@@ -11,6 +11,8 @@ A local-first, Core/Host workspace for worldbuilders and writers. It takes Notio
 | UI term | What it literally is |
 | --- | --- |
 | **Thread** | A plain `.md` file. |
+| **Sub-thread** | A Thread inside a Thread: `A.md` keeps its children in the sibling folder `A/`, and the parent Stitches to each one. |
+| **Cord** | A Thread with a full word processor: a `.cord` file (JSON) with pages, headers and footers, page numbers and linked footnotes. |
 | **Stitch** | A bidirectional `[[Link]]` (`[[Target#anchor\|alias]]`). |
 | **Deep Stitch** | A Stitch into a PDF coordinate: `[[Research.pdf#page=12&highlight=h4f2]]`. |
 | **Dye** | A tag in YAML frontmatter (`dyes: [lore]`; Obsidian's `tags:` also works), drawn as a colored badge. |
@@ -28,6 +30,15 @@ A local-first, Core/Host workspace for worldbuilders and writers. It takes Notio
   - Type `[[` to get a fuzzy Stitch picker. Picking a name that doesn't exist yet creates that Thread when the Stitch is first clicked.
   - Select text to get a bubble menu with formatting, highlight, link and "Stitch the selection".
   - Paste or drop images and PDFs straight into the vault.
+- **Cords** (the word processor): start one with **New Cord** in the Spool, "New Cord here" on a folder, or **Convert to Cord** on any Thread (the Thread is left as it is).
+  - Real pages: Letter, A4, A5, Legal or 6×9 trade, portrait or landscape, with margin presets or exact inches. Blocks flow onto the page they fit on.
+  - A Word-style ribbon. **Home**: paragraph styles, font, size, bold/italic/underline/strike, super- and subscript, text color, highlight, alignment (left, center, right, justify), lists, indent (Tab / Shift+Tab), first-line indent and line spacing. **Insert**: page break (Ctrl+Enter), footnote, Stitch, table, image, divider, date. **Layout**: page size, orientation, margins and the document's base font, size, spacing and indent. **Header & Footer**: left/center/right slots with `{page}`, `{pages}`, `{title}`, `{author}` and `{date}`, page-number presets, 1/i/I/a numbering, a starting number and a different first page. **Review**: word, character, page and footnote counts.
+  - Linked footnotes: numbered automatically, printed at the foot of their page and edited right there. Click a reference to jump to its note, or a note's number to jump back.
+  - Exports: **PDF** (print exactly what's on screen), **Word** (native headers and footers, live page fields, real footnotes, page size and margins) and **Markdown**.
+  - Cords keep Dyes, icons, Stitches and backlinks like any Thread, and the Compiler can bind them.
+- **Thread appearance**: give any Thread its own **icon** (361 Lineicons in four styles: stroke, solid, duotone and bulk), **color** and **background** (a generated backdrop tinted with the Thread's color, a solid color or an image). Icons follow the Thread's color, which by default is its first Dye's color, so they change with the Dye palette. These are stored as `icon:`, `color:` and `background:` in the frontmatter.
+- **Dyes**: rename a Dye (every Thread and highlight is rewritten, and renaming onto an existing Dye merges the two), recolor it, or remove it everywhere. Use **Edit** in the Spool's Dye list or right-click a Dye. **Dye…** in a Thread's menu adds or removes Dyes without opening it.
+- **Sub-threads**: the **Sub-thread** button above the title, `/sub-thread` in the editor, "New sub-thread" in the Spool menu, or drop a Thread onto another in the Spool. The Spool nests them under their parent, and the Stitching panel lists them.
 - **Spool** (left): a floating rail and a nested Project tree. Rows have punchy hover states, a right-click menu (new, rename, delete), drag-to-move and OS file drops. Below the tree is a Dye list that filters the Spool.
 - **Stitching** (right): backlinks with the surrounding line, outgoing Stitches, an outline, Dye editing with palette swatches, and tactile frontmatter controls. Properties use rocker toggles, rotary knobs for numbers, dates, lists and Stitch properties.
 - **Tables**: typed columns (Text, Number with Σ totals, Stitch, Dye, Check, Date), sorting and add/remove. Stitch cells are real links, so relations show up in the Tapestry and in backlinks.
@@ -83,6 +94,7 @@ A local-first, Core/Host workspace for worldbuilders and writers. It takes Notio
 | ![Compiler](docs/screenshots/compiler.jpg) | ![Pinboard](docs/screenshots/pinboard.jpg) |
 | ![Dark mode + pixel backdrop](docs/screenshots/dark-home.jpg) | ![Personalize](docs/screenshots/personalize.jpg) |
 | ![Coming up + activity heat map](docs/screenshots/agenda-heatmap.jpg) | ![Desktop app: native notification](docs/screenshots/desktop-notification.jpg) |
+| ![A Cord: pages, header and footer, footnotes](docs/screenshots/cord.jpg) | ![Thread icon, color and background](docs/screenshots/thread-style.jpg) |
 
 ![Phone, portrait](docs/screenshots/phone-portrait.jpg)
 ![Phone, landscape](docs/screenshots/phone-landscape.jpg)
@@ -122,7 +134,9 @@ My Vault/
 ├── Welcome.md
 ├── The Ashen Reach/
 │   ├── The Ashen Reach.md        ← Project dashboard (folder note)
-│   └── Places/Emberfall.md
+│   ├── Places/Emberfall.md
+│   ├── Places/Emberfall/The Cinder Market.md   ← a sub-thread of Emberfall
+│   └── Manuscript/Query Letter.cord            ← a Cord
 ├── Research/Field Notes.pdf
 ├── attachments/map.png
 └── .thread/                      ← app metadata (like .obsidian/)
@@ -199,6 +213,8 @@ Put the Loom behind TLS (for example Caddy or Tailscale) if it is reachable from
 ```
 src/core/       vault adapters, store, markdown/frontmatter, tables, sync, compiler, backdrops, seed
 src/editor/     TipTap extensions: Stitch, Table, Pinboard, image, slash menu, Stitch picker
+src/cord/       Cords: file model, pagination, ribbon, footnotes, print and DOCX export
+src/assets/icons/ Lineicons 5.2 Free sets (lineicons.com, free license), built by scripts/build-icons.mjs
 src/components/ Rail, Spool, Stitching, palette, settings, backdrop, logo, icons
 src/views/      Home (the Loom), Canvas, Tapestry, Desk (+ PdfReader), Compiler
 src/styles/     design tokens + the component styles
@@ -210,11 +226,12 @@ tests/          vitest suites
 
 ## Testing
 
-`npm test` runs 35 tests. They cover:
+`npm test` runs 40 tests. They cover:
 
 - the editor's Markdown round trip
 - parsing and tables
 - PDF/DOCX export
+- Cords: file round trip, Markdown rendering with footnotes, indexing, rename rewrites, page-number formats and the Word export (footnotes, page setup, page fields)
 - deadline extraction, reminder timing and ICS output
 - Google Calendar sync against an in-memory fake of the Calendar API
 - activity merging and streaks

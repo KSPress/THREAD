@@ -36,6 +36,22 @@ export const SLASH_ITEMS: MenuItem[] = [
   block('pinboard', 'Pinboard', '◫', 'Weave', 'Infinite visual canvas', (e) => e.chain().insertPinboard().run()),
   block('stitch', 'Stitch', '⌗', 'Weave', 'Link to another Thread', (e) => e.chain().insertContent('[[').run()),
   block('image', 'Image', '▣', 'Weave', 'Upload into the vault', (e) => pickImage(e)),
+  {
+    id: 'sub',
+    title: 'Sub-thread',
+    glyph: '↳',
+    group: 'Weave',
+    hint: 'A new Thread nested inside this one',
+    run: (editor: Editor, range: Range) => {
+      editor.chain().focus().deleteRange(range).run()
+      const s = useStore.getState()
+      const parent = s.active
+      if (!parent) return
+      const name = prompt('Name the sub-thread', 'Untitled')
+      if (!name) return
+      void s.createSubThread(parent, name).then((p) => editor.chain().focus().insertStitch({ target: stem(p) }).run())
+    },
+  },
   block('due', 'Due date', '📅', 'Weave', 'Add a dated to-do (reminders + calendar)', (e) => {
     const d = new Date(Date.now() + 7 * 86400000)
     const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`

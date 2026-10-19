@@ -1,6 +1,7 @@
 // A small sample world so every part of THREAD has something to show.
 import type { VaultAdapter } from './vault'
 import { serializeTable, uid, type TableData } from './table'
+import { newCord, serializeCord } from '../cord/model'
 
 const P = 'The Ashen Reach'
 
@@ -106,6 +107,7 @@ export async function seedVault(v: VaultAdapter) {
   const files: Record<string, string> = {
     'Welcome to THREAD.md': `---
 dyes: [guide]
+icon: duotone/bulb-2
 pinned: true
 ---
 
@@ -139,6 +141,8 @@ THREAD is a local-first workspace: every **Thread** is a plain \`.md\` file in y
 `,
     [`${P}/${P}.md`]: `---
 type: project
+icon: duotone/mountains-2
+background: halftone
 dyes: [project, worldbuilding]
 summary: A volcanic frontier where the ash remembers every promise.
 status: drafting
@@ -174,6 +178,7 @@ __PINBOARD__
 `,
     [`${P}/Places/Emberfall.md`]: `---
 dyes: [place]
+icon: duotone/buildings-1
 population: 42000
 founded: 1132-04-09
 capital: true
@@ -187,9 +192,23 @@ The ash-city at the foot of the mountain. Contracts here are sealed by pressing 
 > [[Field Notes on Ash.pdf#page=1&highlight=hseed01]]
 
 Home of [[Aria Venn]]. Trades glass and grief with [[Varrow]].
+
+## Districts
+
+- [[The Cinder Market]]
+`,
+    [`${P}/Places/Emberfall/The Cinder Market.md`]: `---
+dyes: [place]
+icon: duotone/flag-1
+---
+
+# The Cinder Market
+
+A sub-thread of [[Emberfall]]. Where debts are bought and sold by the bowlful.
 `,
     [`${P}/Places/Varrow.md`]: `---
 dyes: [place]
+icon: duotone/bridge-3
 population: 9100
 ---
 
@@ -201,6 +220,7 @@ The first clause of [[The Ash Compact]] forbids living ash from crossing here.
 `,
     [`${P}/Characters/Aria Venn.md`]: `---
 dyes: [character, protagonist]
+icon: duotone/user-4
 age: 24
 home: "[[Emberfall]]"
 alive: true
@@ -225,6 +245,7 @@ A cinder-scribe from [[Emberfall]] who discovers her copy of [[The Ash Compact]]
 `,
     [`${P}/Characters/Bren Hollow.md`]: `---
 dyes: [character]
+icon: stroke/user-4
 age: 31
 home: "[[Varrow]]"
 alive: true
@@ -236,6 +257,8 @@ Keeper of the Varrow bridge ledger. Has never crossed his own bridge. Owes [[Ari
 `,
     [`${P}/Lore/The Ash Compact.md`]: `---
 dyes: [lore, law]
+icon: bulk/book-1
+color: "#8C6A9E"
 signed: 1132-04-09
 ---
 
@@ -301,9 +324,10 @@ dyes: [research]
 `,
   }
 
-  for (const dir of [P, `${P}/Places`, `${P}/Characters`, `${P}/Lore`, `${P}/Manuscript`, 'Research', 'attachments']) await v.mkdir(dir)
+  for (const dir of [P, `${P}/Places`, `${P}/Places/Emberfall`, `${P}/Characters`, `${P}/Lore`, `${P}/Manuscript`, 'Research', 'attachments']) await v.mkdir(dir)
   const board = await pinboard()
   for (const [path, content] of Object.entries(files)) await v.writeText(path, content.replace('__PINBOARD__', board))
+  await v.writeText(`${P}/Manuscript/Query Letter.cord`, serializeCord(sampleCord()))
 
   const pdf = await samplePdf()
   if (pdf) {
@@ -447,4 +471,44 @@ function sampleActivity() {
     }
   }
   return log
+}
+
+/** A Cord: the manuscript's submission letter, laid out on real pages. */
+function sampleCord() {
+  const c = newCord('The Ashen Reach', { dyes: ['manuscript'], icon: 'duotone/pen-to-square', author: 'A. Writer', status: 'draft' })
+  c.header = { left: '{author}', center: '', right: '{title}' }
+  c.footer = { left: '', center: '{page}', right: '' }
+  const t = (text: string, marks?: { type: string }[]) => ({ type: 'text', text, ...(marks ? { marks } : {}) })
+  const p = (...content: object[]) => ({ type: 'paragraph', content })
+  c.doc = {
+    type: 'doc',
+    content: [
+      { type: 'heading', attrs: { level: 1, textAlign: 'center' }, content: [t('The Ashen Reach')] },
+      { type: 'paragraph', attrs: { textAlign: 'center', firstLine: 0 }, content: [t('A novel of 96,000 words', [{ type: 'italic' }])] },
+      { type: 'heading', attrs: { level: 2 }, content: [t('Query')] },
+      p(
+        t('In Emberfall, ash remembers. Aria Venn, a cinder scribe sworn to the '),
+        { type: 'stitch', attrs: { target: 'The Ash Compact', anchor: null, alias: null } },
+        t(', reads the grey drift that settles each morning and writes down what the dead saw.'),
+        { type: 'footnote', attrs: { id: 'fn-seed1', text: 'The Compact dates to the first eruption; see the Lore Threads.' } },
+      ),
+      p(
+        t('When the ash begins recording things that have not happened yet, Aria must cross the toll-bridge at '),
+        { type: 'stitch', attrs: { target: 'Varrow', anchor: null, alias: null } },
+        t(' with Bren Hollow, a smuggler who owes her a debt and owes the city a hanging.'),
+      ),
+      p(t('THE ASHEN REACH is complete at 96,000 words. It will appeal to readers of slow-burning, place-haunted fantasy.'), { type: 'footnote', attrs: { id: 'fn-seed2', text: 'Comparable titles go here.' } }),
+      { type: 'heading', attrs: { level: 2 }, content: [t('Synopsis')] },
+      ...[
+        'Aria Venn has spent eleven years reading ash. Each dawn she climbs to the scribes’ terrace above the Cinder Market and records what the night’s fall remembers: a fishwife’s last argument, a lamplighter’s fall, the slow collapse of a chimney three streets over.',
+        'The Compact that binds the scribes forbids interpretation. They write; the Wardens decide. But when the ash records the Warden-General’s death two weeks before it happens, Aria hides the page instead of filing it.',
+        'Her concealment draws the attention of Bren Hollow, who smuggles unfiled pages to the cities downriver. He knows a buyer in Varrow who collects futures. Together they leave Emberfall by the old toll-bridge, pursued by Wardens who have also begun to read the ash wrongly.',
+        'In Varrow, Aria learns that the ash has always recorded futures; the Compact was written to hide them. The Wardens have been shaping Emberfall for generations by filing only the futures they wanted.',
+      ].map((x) => p(t(x))),
+      { type: 'pageBreak' },
+      { type: 'heading', attrs: { level: 2 }, content: [t('About the author')] },
+      p(t('A. Writer lives near a volcano that has never once remembered anything. This is their first novel.')),
+    ],
+  }
+  return c
 }

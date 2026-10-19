@@ -1,16 +1,17 @@
 // The Stitching: right sidebar with Backlinks and the tactile Frontmatter UI.
 import { useMemo, useRef, useState, type PointerEvent } from 'react'
-import { backlinksOf, useStore, type ThreadInfo, useDyeColor } from '../core/store'
+import { backlinksOf, subThreadDir, useStore, type ThreadInfo } from '../core/store'
+import { ThreadIcon } from './ThreadIcon'
 import { normalizeDye, type Frontmatter } from '../core/markdown'
-import { PALETTES, useSettings } from '../core/settings'
 import { Icon } from './Icon'
 import { DyeBadge } from './DyeBadge'
 import { Heatmap } from './Heatmap'
+import { DyeEditor } from './DyeEditor'
 import { GcalPill } from './Agenda'
 import { extractDeadlines, parseWhen } from '../../shared/deadlines.js'
 import { relativeDue, isOverdue } from '../core/deadlines'
 
-const RESERVED = new Set(['dyes', 'tags', 'deadline', 'due', 'remind', 'done'])
+const RESERVED = new Set(['dyes', 'tags', 'deadline', 'due', 'remind', 'done', 'icon', 'color', 'background'])
 
 export function Stitching() {
   const active = useStore((s) => s.active)
@@ -79,6 +80,7 @@ function StitchingBody({ thread }: { thread: ThreadInfo }) {
       </section>
 
       <DyesModule thread={thread} />
+      <SubThreadsModule thread={thread} />
       <DeadlineModule thread={thread} />
       <PropertiesModule thread={thread} />
       <section className="module">
@@ -145,7 +147,7 @@ function StitchingBody({ thread }: { thread: ThreadInfo }) {
                 className="outline-item"
                 style={{ ['--lvl' as any]: h.level - 1 }}
                 onClick={() => {
-                  const el = [...document.querySelectorAll('.thread-editor h1, .thread-editor h2, .thread-editor h3, .thread-editor h4')].find(
+                  const el = [...document.querySelectorAll('.thread-editor h1, .thread-editor h2, .thread-editor h3, .thread-editor h4, .cord-editor h1, .cord-editor h2, .cord-editor h3, .cord-editor h4')].find(
                     (e) => e.textContent?.trim() === h.text.trim(),
                   )
                   el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -186,12 +188,9 @@ function contextLine(body: string, raw: string) {
 
 function DyesModule({ thread }: { thread: ThreadInfo }) {
   const setFrontmatter = useStore((s) => s.setFrontmatter)
-  const setDyeColor = useStore((s) => s.setDyeColor)
-  const dyeColor = useDyeColor()
   const threads = useStore((s) => s.threads)
-  const palette = useSettings((s) => s.palette)
   const [draft, setDraft] = useState('')
-  const [editing, setEditing] = useState<string | null>(null)
+  const [editing, setEditing] = useState<{ dye: string; rect: DOMRect } | null>(null)
   const all = useMemo(() => {
     const s = new Set<string>()
     Object.values(threads).forEach((t) => t.dyes.forEach((d) => s.add(d)))
@@ -218,7 +217,7 @@ function DyesModule({ thread }: { thread: ThreadInfo }) {
       <div className="module__body">
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 10 }}>
           {thread.dyes.map((d) => (
-            <DyeBadge key={d} dye={d} onClick={() => setEditing(editing === d ? null : d)}>
+            <DyeBadge key={d} dye={d} onClick={(e) => setEditing({ dye: d, rect: (e!.currentTarget as HTMLElement).getBoundingClientRect() })}>
               <span
                 role="button"
                 style={{ marginLeft: 2, opacity: 0.55 }}
@@ -233,29 +232,7 @@ function DyesModule({ thread }: { thread: ThreadInfo }) {
           ))}
           {thread.dyes.length === 0 && <span className="empty-note">Undyed. Dyes color this Thread across the Spool and the Tapestry.</span>}
         </div>
-        {editing && (
-          <div className="pop" style={{ marginBottom: 10 }}>
-            <div className="label" style={{ marginBottom: 8 }}>
-              [ Color · {editing} ]
-            </div>
-            <div className="swatches">
-              {PALETTES[palette].colors.map((c) => (
-                <button
-                  key={c}
-                  className={'swatch' + (dyeColor(editing) === c ? ' is-on' : '')}
-                  style={{ background: c }}
-                  onClick={() => {
-                    void setDyeColor(editing, c)
-                    setEditing(null)
-                  }}
-                />
-              ))}
-              <label className="swatch" style={{ background: 'conic-gradient(red, yellow, lime, cyan, blue, magenta, red)', cursor: 'pointer' }}>
-                <input type="color" style={{ opacity: 0, width: 0, height: 0 }} onChange={(e) => void setDyeColor(editing, e.target.value)} />
-              </label>
-            </div>
-          </div>
-        )}
+        {editing && <DyeEditor dye={editing.dye} anchor={editing.rect} onClose={() => setEditing(null)} />}
         <div style={{ display: 'flex', gap: 6 }}>
           <input
             className="input"
@@ -563,6 +540,46 @@ function DeadlineModule({ thread }: { thread: ThreadInfo }) {
             ))}
           </div>
         )}
+      </div>
+    </section>
+  )
+}
+
+function SubThreadsModule({ thread }: { thread: ThreadInfo }) {
+  const threads = useStore((s) => s.threads)
+  const open = useStore((s) => s.open)
+  const createSubThread = useStore((s) => s.createSubThread)
+  const dir = subThreadDir(thread.path) + '/'
+  const children = Object.values(threads)
+    .filter((t) => t.path.startsWith(dir) && !t.path.slice(dir.length).includes('/'))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+  return (
+    <section className="module">
+      <div className="module__head">
+        <span className="label">[ Sub-threads ]</span>
+        <span className="spacer" />
+        <button
+          className="chip-btn"
+          onClick={async () => {
+            const name = prompt('Name the sub-thread', 'Untitled')
+            if (name) open(await createSubThread(thread.path, name, { stitch: true }))
+          }}
+        >
+          <Icon name="plus" size={11} /> New
+        </button>
+      </div>
+      <div className="module__body">
+        {children.length === 0 && <div className="empty-note">None yet. Type /sub-thread in the page, or drop a Thread onto this one in the Spool.</div>}
+        {children.map((c) => (
+          <button key={c.path} className="backlink" onClick={() => open(c.path)}>
+            <b>
+              <ThreadIcon thread={c} size={14} /> {c.name}
+              <span className="mono muted" style={{ marginLeft: 'auto', fontSize: 10.5 }}>
+                {c.words}w
+              </span>
+            </b>
+          </button>
+        ))}
       </div>
     </section>
   )

@@ -7,6 +7,7 @@ import { DyeBadge } from '../components/DyeBadge'
 import { Icon } from '../components/Icon'
 import { resolveTarget, useStore, useDyeColor } from '../core/store'
 import { basename } from '../core/paths'
+import { threadColor } from '../core/appearance'
 import { PALETTES, useSettings } from '../core/settings'
 
 interface GNode {
@@ -80,7 +81,7 @@ export function TapestryView() {
         label: t.name,
         kind: 'thread',
         group,
-        color: t.dyes[0] ? dyeColor(t.dyes[0]) : groups.get(group) ?? colors[0],
+        color: threadColor(t.frontmatter, t.dyes, dyeColor) ?? groups.get(group) ?? colors[0],
         mtime: t.mtime,
       })
     }

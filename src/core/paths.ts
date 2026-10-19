@@ -37,7 +37,8 @@ export type FileKind = 'thread' | 'pdf' | 'epub' | 'image' | 'other'
 
 export function kindOf(path: string): FileKind {
   const ext = extname(path)
-  if (ext === '.md' || ext === '.markdown') return 'thread'
+  // Cords (.cord) are Threads with a word processor; they index and link like Threads.
+  if (ext === '.md' || ext === '.markdown' || ext === '.cord') return 'thread'
   if (ext === '.pdf') return 'pdf'
   if (ext === '.epub') return 'epub'
   if (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.avif'].includes(ext)) return 'image'
