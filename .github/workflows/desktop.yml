@@ -21,7 +21,8 @@ jobs:
           - platform: macos-latest
             name: macos-apple-silicon
             args: '--target aarch64-apple-darwin'
-          - platform: macos-13
+          # Intel Macs: cross-compiled on the Apple Silicon runner.
+          - platform: macos-latest
             name: macos-intel
             args: '--target x86_64-apple-darwin'
           - platform: ubuntu-22.04
@@ -37,6 +38,8 @@ jobs:
           cache: npm
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ startsWith(matrix.platform, 'macos') && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       - uses: swatinem/rust-cache@v2
         with:
