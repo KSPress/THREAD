@@ -6,6 +6,7 @@ const MIME: Record<string, string> = {
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   md: 'text/markdown',
   epub: 'application/epub+zip',
+  ics: 'text/calendar',
 }
 
 /** Save bytes through the native dialog (Tauri) or a browser download. */

@@ -19,6 +19,11 @@ import { App } from './App'
 // Excalidraw (Pinboards) loads its fonts from here; served locally for offline use.
 ;(window as any).EXCALIDRAW_ASSET_PATH = '/excalidraw/'
 
+// Installable, offline-capable PWA on phones/tablets (not inside the desktop app).
+if (import.meta.env.PROD && 'serviceWorker' in navigator && !('__TAURI_INTERNALS__' in window)) {
+  window.addEventListener('load', () => void navigator.serviceWorker.register('/sw.js'))
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />

@@ -7,6 +7,19 @@ export default defineConfig({
   clearScreen: false,
   server: { port: 1420, strictPort: true },
   envPrefix: ['VITE_', 'TAURI_'],
+  // Lazily imported heavy deps, pre-bundled so the dev server never reloads mid-session.
+  optimizeDeps: {
+    include: [
+      'pdfjs-dist',
+      'pdfmake/build/pdfmake',
+      'pdfmake/build/vfs_fonts',
+      'docx',
+      '@excalidraw/excalidraw',
+      '@tauri-apps/api/core',
+      '@tauri-apps/plugin-dialog',
+      '@tauri-apps/plugin-notification',
+    ],
+  },
   build: {
     target: 'es2022',
     chunkSizeWarningLimit: 4000,

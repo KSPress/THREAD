@@ -2,6 +2,11 @@
 // thin-rule aesthetic of the reference panels.
 const PATHS: Record<string, string> = {
   plus: 'M12 5v14M5 12h14',
+  menu: 'M4 7h16M4 12h16M4 17h10',
+  up: 'M6 15l6-6 6 6',
+  calendar: 'M4 6h16v14H4zM4 10h16M8 3v5M16 3v5',
+  bell: 'M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 20a2 2 0 0 0 4 0',
+  flame: 'M12 3c1 4 5 5 5 10a5 5 0 0 1-10 0c0-3 2-4 2-7 1 1 2 2 3 3 0-2 0-4 0-6z',
   home: 'M4 11l8-6 8 6v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z',
   canvas: 'M5 4h10l4 4v12H5zM15 4v4h4M8 12h8M8 16h5',
   tapestry: 'M6 6m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0M18 7m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0M12 18m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0M8 6.5l8 .5M7 8l4 8.2M17 9l-4 7.2',

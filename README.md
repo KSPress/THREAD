@@ -43,7 +43,27 @@ A local-first, Core/Host workspace for worldbuilders and writers. It takes Notio
   - Sky tint, radial-blur intensity, card opacity and film grain.
   - Writing and display fonts (Inter, Jost, Literata, JetBrains Mono).
   - Accent color, light/dark/auto theme, and three Dye palettes taken from the reference boards (Earth, Signal, Loom).
-- **Responsive**: the same app runs as a tablet or phone Satellite. The rail becomes a bottom bar and the panels slide over the content.
+- **Deadlines and reminders**:
+  - Set a date (and optionally a time) in the Stitching panel's Deadline module. It is stored as `deadline:` / `remind:` in the frontmatter.
+  - Or write a dated to-do anywhere: `- [ ] Draft chapter 📅 2026-11-01 ⏰ 14:30`. This is the Obsidian Tasks syntax; type `/due` to insert one.
+  - **Coming up** on the Loom lists overdue and upcoming items.
+  - While THREAD is open you get system notifications: the browser Notification API or a service worker, and the native notification plugin on desktop.
+- **Google Calendar**:
+  - Deadlines sync into a calendar THREAD creates for itself, using the narrow `calendar.app.created` scope. THREAD cannot see or change your other calendars.
+  - Sync is idempotent: new deadlines are created, changed ones updated, removed ones deleted.
+  - Google then delivers the reminders to your phone even when THREAD is closed, and each event links back to its Thread (`#open=<path>`).
+  - No-OAuth alternatives: **Export .ics**, or subscribe Google Calendar to the Loom's `/calendar.ics` feed.
+- **Activity heat map**: a GitHub-style grid of the days you wrote.
+  - Each day is painted in the Dye colors of the Threads you worked on. Several Dyes split the cell into up to three bands, and intensity follows the amount of writing.
+  - Tap a day to list its Threads, filter by Dye, and see your current and longest streaks.
+  - Each Thread's Stitching panel has its own strip ("Woven on").
+  - Each device logs to `.thread/activity/<device>.json`, so the Loom merges history across devices without devices overwriting each other.
+- **Responsive and installable**:
+  - Phone portrait and iPad portrait get a bottom navigation bar.
+  - Phones in landscape get a slim side rail.
+  - The Spool and Stitching panels become overlays you dismiss with a tap outside.
+  - Touch-only controls: "⋯" row menus, up/down manuscript buttons, and long-press text selection at the Desk.
+  - In the browser THREAD is an installable PWA (manifest + service worker) that opens and edits offline.
 - **Keyboard**:
 
   | Shortcut | Action |
@@ -61,6 +81,10 @@ A local-first, Core/Host workspace for worldbuilders and writers. It takes Notio
 | ![Tapestry — Web](docs/screenshots/tapestry-web.jpg) | ![Tapestry — Loom lanes](docs/screenshots/tapestry-loom.jpg) |
 | ![Compiler](docs/screenshots/compiler.jpg) | ![Pinboard](docs/screenshots/pinboard.jpg) |
 | ![Dark mode + pixel backdrop](docs/screenshots/dark-home.jpg) | ![Personalize](docs/screenshots/personalize.jpg) |
+| ![Coming up + activity heat map](docs/screenshots/agenda-heatmap.jpg) | ![Desktop app: native notification](docs/screenshots/desktop-notification.jpg) |
+
+![Phone, portrait](docs/screenshots/phone-portrait.jpg)
+![Phone, landscape](docs/screenshots/phone-landscape.jpg)
 
 ## Architecture
 
@@ -117,6 +141,12 @@ npm test               # editor round-trip, core, exports, and a live Loom with 
 npm run build          # production web build in dist/
 ```
 
+### Phones and tablets
+
+Serve the production build (`npm run build`, then any static host or `npx vite preview --host`) and open it on the device. Use **Add to Home Screen** to install it. On iPhone this step is required for notifications.
+
+The vault lives in the browser's IndexedDB on that device. Connect a Loom to share it with your other devices.
+
 ### Desktop (Tauri 2)
 
 ```bash
@@ -125,7 +155,23 @@ npm run tauri dev
 npm run tauri build
 ```
 
-Desktop adds native folder vaults, a native save dialog for exports and Pandoc typesetting (if `pandoc` is on `PATH`).
+Desktop adds:
+
+- native folder vaults; you can also open one from the command line with `thread ~/Worlds` or `THREAD_VAULT=~/Worlds`
+- a native save dialog for exports
+- native notifications
+- Pandoc typesetting, if `pandoc` is on `PATH`
+
+### Google Calendar setup (once)
+
+1. In console.cloud.google.com, create a project and enable the **Google Calendar API**.
+2. On the OAuth consent screen, choose External and add yourself as a test user.
+3. Create an OAuth client:
+   - **Browser / PWA**: type *Web application*, with the origin you serve THREAD from (for example `https://thread.example.com`) as an authorized JavaScript origin.
+   - **Desktop app**: type *Desktop app*. Sign-in opens in your system browser and returns through a loopback redirect, using PKCE.
+4. In THREAD, open **Make it yours → Google Calendar**, paste the client ID (plus the client secret for Desktop) and press **Connect**.
+
+If you'd rather not create an OAuth client, run a Loom and subscribe from Google Calendar to `https://<loom>/calendar.ics?token=…` (*Other calendars → From URL*). Set `LOOM_APP_URL` so events link back to THREAD.
 
 ### The Loom (Host)
 
@@ -153,12 +199,38 @@ src-tauri/      Rust desktop host
 tests/          vitest suites
 ```
 
+## Testing
+
+`npm test` runs 35 tests. They cover:
+
+- the editor's Markdown round trip
+- parsing and tables
+- PDF/DOCX export
+- deadline extraction, reminder timing and ICS output
+- Google Calendar sync against an in-memory fake of the Calendar API
+- activity merging and streaks
+- a live Loom with two Satellites: offline merges, external disk edits, assets and the calendar feed
+
+`cd src-tauri && cargo test` covers vault path confinement, the PKCE challenge (RFC 7636 vector) and loopback redirect parsing.
+
+Manual run-through for this release:
+
+| Target | How it was tested | Result |
+| --- | --- | --- |
+| Desktop browser | Chromium 1440×900 and 1280×720 | All views pass |
+| iPad | 820×1180 portrait and 1180×820 landscape, touch emulation | All views pass |
+| Phone | 390×844 portrait and 844×390 landscape, touch emulation | All views pass, no horizontal overflow |
+| Desktop app | Real Tauri window (WebKitGTK) under Xvfb with a folder vault | Editing to disk, the Desk, native save dialog PDF export, Pandoc EPUB, a native notification, and the Google OAuth loopback up to Google's token endpoint |
+| Installed PWA | Phone profile, offline reload | App, vault, PDF and edits all work offline |
+
 ## Status and next steps
 
-All items listed above work and have been tested end to end in Chromium. That includes two browser Satellites syncing live through a running Loom.
+All items listed above work and were tested as described in the Testing section.
 
 Not built yet:
 
 - **ePub at the Desk.** The design document allows "PDF/ePub", but only PDF is implemented. A `.epub` file is recognized and can be stitched to, but it does not open in the reader yet.
 - **Rename/delete conflicts across Satellites.** These use last-writer-wins. Edits to the text inside a Thread are fully merged.
-- **Signed releases and mobile store builds.** The Tauri project is ready for `tauri android/ios init`, but no signed builds have been made.
+- **Signed releases and mobile store builds.** The Tauri project is ready for `tauri android/ios init`, but no signed builds have been made. On phones THREAD runs as the PWA.
+- **Reminders while THREAD is closed** come from Google Calendar or the ICS feed. THREAD has no push server of its own.
+- **Google Calendar sync is one-way**, from THREAD to Google. Moving an event in Google does not change the Thread.

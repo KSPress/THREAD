@@ -18,7 +18,9 @@ import path from 'node:path'
 import { timingSafeEqual } from 'node:crypto'
 import { WebSocketServer } from 'ws'
 import * as Y from 'yjs'
+import YAML from 'yaml'
 import { applyTextDiff, baselineUpdate, fromBase64, TEXT_KEY, toBase64 } from '../shared/ytext.js'
+import { extractDeadlines, toICS } from '../shared/deadlines.js'
 
 const ROOT = path.resolve(process.env.LOOM_DIR ?? './loom-data/vault')
 const STATE = path.join(ROOT, '.loom')
@@ -26,6 +28,8 @@ const TOKEN = process.env.LOOM_TOKEN ?? ''
 const PORT = Number(process.env.PORT ?? 7878)
 const HOST = process.env.HOST ?? '0.0.0.0'
 const WRITE_DELAY = 250
+/** Where THREAD is served (e.g. https://thread.example.com) so feed events can link back. */
+const APP_URL = (process.env.LOOM_APP_URL ?? '').replace(/\/$/, '')
 
 /** @type {Map<string, { doc: Y.Doc, timer?: NodeJS.Timeout }>} */
 const docs = new Map()
@@ -212,6 +216,11 @@ const server = createServer(async (req, res) => {
     }
     if (!authorized(req, url)) return void res.writeHead(401).end('unauthorized')
 
+    if (url.pathname === '/calendar.ics' && req.method === 'GET') {
+      res.writeHead(200, { 'content-type': 'text/calendar; charset=utf-8', 'cache-control': 'no-cache' })
+      return void res.end(await calendarFeed())
+    }
+
     if (url.pathname === '/manifest' && req.method === 'GET') {
       const out = []
       for (const rel of await walk()) {
@@ -288,6 +297,31 @@ server.on('upgrade', (req, socket, head) => {
     })
   })
 })
+
+/* ------------------------------------------------------------------ */
+/* Calendar feed: every deadline in the vault as iCalendar             */
+/* ------------------------------------------------------------------ */
+
+async function calendarFeed() {
+  const items = []
+  for (const rel of (await walk()).filter((p) => isThread(p) && !p.split('/').some((x) => x.startsWith('.')))) {
+    const raw = docs.get(rel)?.doc.getText(TEXT_KEY).toString() ?? (await fs.readFile(path.join(ROOT, rel), 'utf8').catch(() => ''))
+    let frontmatter = {}
+    let body = raw
+    const m = raw.match(/^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/)
+    if (m) {
+      try {
+        frontmatter = YAML.parse(m[1]) ?? {}
+      } catch {
+        frontmatter = {}
+      }
+      body = raw.slice(m[0].length)
+    }
+    const title = (typeof frontmatter.title === 'string' && frontmatter.title) || body.match(/^#\s+(.+)$/m)?.[1]?.trim() || path.posix.basename(rel, '.md')
+    items.push(...extractDeadlines(rel, title, frontmatter, body))
+  }
+  return toICS(items, { name: `THREAD — ${path.basename(ROOT)}`, link: APP_URL ? (p) => `${APP_URL}/#open=${encodeURIComponent(p)}` : undefined })
+}
 
 /* ------------------------------------------------------------------ */
 /* Watch the master directory for edits made outside THREAD             */

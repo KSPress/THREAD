@@ -340,6 +340,18 @@ function Row({
       )}
       {thread?.dyes[0] && <span className="tree-row__dye" style={{ background: dyeColor(thread.dyes[0]) }} />}
       {isFolder && <span className="count">{countThreads(node)}</span>}
+      <span
+        className="tree-row__more"
+        role="button"
+        aria-label={`More actions for ${node.name}`}
+        onClick={(e) => {
+          e.stopPropagation()
+          const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+          onCtx({ x: r.left, y: r.bottom + 4, node })
+        }}
+      >
+        <Icon name="more" size={16} />
+      </span>
     </div>
   )
 }

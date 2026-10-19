@@ -11,5 +11,7 @@ services:
       - "7878:7878"
     environment:
       LOOM_TOKEN: ${LOOM_TOKEN:?set LOOM_TOKEN}
+      # Optional: where THREAD is served, so calendar events link back to Threads.
+      LOOM_APP_URL: ${LOOM_APP_URL:-}
     volumes:
       - ./loom-data/vault:/vault

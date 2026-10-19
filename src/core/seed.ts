@@ -4,6 +4,12 @@ import { serializeTable, uid, type TableData } from './table'
 
 const P = 'The Ashen Reach'
 
+/** A date relative to today, as YYYY-MM-DD (seed deadlines stay current). */
+function day(offset: number) {
+  const d = new Date(Date.now() + offset * 86400000)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 function table(): string {
   const cols = [
     { id: 'c1', name: 'Place', type: 'text' as const },
@@ -119,6 +125,8 @@ THREAD is a local-first workspace: every **Thread** is a plain \`.md\` file in y
 - **Pinboard** — an infinite canvas living inside a Thread. Type \`/pinboard\`.
 - **The Desk** — PDF on the left, Thread on the right.
 - **The Compiler** — binds Threads into a print-ready PDF or Word file.
+- **Deadlines** — set a date in the Stitching panel (or \`deadline:\` in the properties), or add a to-do with a date: type \`/due\`. They show up under *Coming up*, remind you, and can sync to Google Calendar.
+- **Heat map** — the Loom shows which days you wove which Threads, painted in their Dye colors.
 
 ## Try it
 
@@ -134,6 +142,8 @@ type: project
 dyes: [project, worldbuilding]
 summary: A volcanic frontier where the ash remembers every promise.
 status: drafting
+deadline: ${day(12)}
+remind: [1w, 1d]
 ---
 
 # ${P}
@@ -155,6 +165,12 @@ __PINBOARD__
 - The origins of [[The Ash Compact]]
 - Why does [[Bren Hollow]] refuse to cross the toll-bridge?
 - [[Glass Hollow]] — still unwritten
+
+## To do
+
+- [ ] Outline chapter three 📅 ${day(5)}
+- [ ] Map the toll-bridge district 📅 ${day(9)} ⏰ 10:00
+- [x] Name the river 📅 ${day(-3)}
 `,
     [`${P}/Places/Emberfall.md`]: `---
 dyes: [place]
@@ -202,6 +218,10 @@ A cinder-scribe from [[Emberfall]] who discovers her copy of [[The Ash Compact]]
 ## Relationships
 
 - [[Bren Hollow]] — owes her a debt sealed in ash
+
+## Open questions
+
+- [ ] Decide what Aria's ledger really says 📅 ${day(-1)}
 `,
     [`${P}/Characters/Bren Hollow.md`]: `---
 dyes: [character]
@@ -238,6 +258,8 @@ Signed in the year of the Long Smoke by the three founding houses of [[Emberfall
 `,
     [`${P}/Manuscript/01 The Cinder Scribe.md`]: `---
 dyes: [chapter, draft]
+deadline: ${day(3)}T17:00
+remind: [1d, 1h]
 ---
 
 # The Cinder Scribe
@@ -301,6 +323,7 @@ dyes: [research]
     await v.writeText('.thread/highlights/Research/Field Notes on Ash.pdf.json', JSON.stringify(highlights, null, 2))
   }
 
+  await v.writeText('.thread/activity/sample.json', JSON.stringify(sampleActivity(), null, 0))
   await v.writeText(
     '.thread/dyes.json',
     JSON.stringify(
@@ -394,4 +417,34 @@ async function locateText(pdf: Uint8Array, pageNo: number, needle: string) {
     console.warn('Could not locate sample highlight', e)
     return [{ x: 0.1, y: 0.1, w: 0.8, h: 0.03 }]
   }
+}
+
+/** Five months of plausible writing history, so the heat map has a story. */
+function sampleActivity() {
+  let seed = 7
+  const rand = () => ((seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) / 2 ** 32)
+  // [path, first day ago, last day ago, chance per day]
+  const plan: [string, number, number, number][] = [
+    [`${P}/${P}.md`, 150, 100, 0.35],
+    [`${P}/Lore/The Ash Compact.md`, 140, 90, 0.3],
+    [`${P}/Places/Emberfall.md`, 120, 70, 0.3],
+    [`${P}/Places/Varrow.md`, 110, 60, 0.22],
+    [`${P}/Characters/Aria Venn.md`, 100, 30, 0.3],
+    [`${P}/Characters/Bren Hollow.md`, 80, 25, 0.22],
+    ['Research/Reading List.md', 130, 40, 0.12],
+    [`${P}/Manuscript/01 The Cinder Scribe.md`, 45, 1, 0.55],
+    [`${P}/Manuscript/02 The Toll-Bridge.md`, 25, 0, 0.5],
+    [`${P}/Manuscript/Glossary.md`, 30, 2, 0.15],
+  ]
+  const log: Record<string, Record<string, number>> = {}
+  for (const [path, from, to, p] of plan) {
+    for (let ago = from; ago >= to; ago--) {
+      const d = new Date(Date.now() - ago * 86400000)
+      const weekend = d.getDay() === 0 || d.getDay() === 6
+      if (rand() > p * (weekend ? 1.4 : 1)) continue
+      const key = day(-ago)
+      ;(log[key] ??= {})[path] = 1 + Math.floor(rand() * 9)
+    }
+  }
+  return log
 }

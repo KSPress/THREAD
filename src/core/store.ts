@@ -13,6 +13,7 @@ import {
 import { basename, dirname, isHidden, join, kindOf, META_DIR, safeName, stem, type FileKind } from './paths'
 import { LoomSync, type LoomStatus } from './sync'
 import { PALETTES, useSettings } from './settings'
+import { deviceId, loadActivity, recordActivity, renameActivity } from './activity'
 import type { VaultAdapter, VaultEntry } from './vault'
 
 export type View = 'home' | 'canvas' | 'tapestry' | 'desk' | 'compiler'
@@ -130,6 +131,9 @@ interface Actions {
 }
 
 let sync: LoomSync | null = null
+
+/** Phones (either orientation) and tablets in portrait: side panels overlay the content. */
+export const isCompact = () => typeof window !== 'undefined' && (window.innerWidth <= 860 || window.innerHeight <= 520)
 export const getSync = () => sync
 
 export const useStore = create<State & Actions>((set, get) => ({
@@ -145,7 +149,7 @@ export const useStore = create<State & Actions>((set, get) => ({
   dyeFilter: null,
   recent: [],
   // Satellites on tablets/phones start with the side panels tucked away.
-  spoolOpen: typeof window === 'undefined' || window.innerWidth > 860,
+  spoolOpen: !isCompact(),
   stitchingOpen: typeof window === 'undefined' || window.innerWidth > 1180,
   paletteOpen: false,
   settingsOpen: false,
@@ -174,6 +178,7 @@ export const useStore = create<State & Actions>((set, get) => ({
     const dyeColors = await get().readMeta<Record<string, string>>('dyes.json', {})
     const recent = (await get().readMeta<string[]>('recent.json', [])).filter((p) => get().threads[p])
     set({ dyeColors, recent, loading: false })
+    await loadActivity()
     await get().connectLoom()
   },
 
@@ -215,7 +220,7 @@ export const useStore = create<State & Actions>((set, get) => ({
     if (f.kind !== 'thread') return
     const recent = [path, ...get().recent.filter((p) => p !== path)].slice(0, 30)
     set({ active: path, recent, view: get().view === 'desk' ? 'desk' : 'canvas' })
-    if (window.innerWidth <= 860) set({ spoolOpen: false })
+    if (isCompact()) set({ spoolOpen: false, stitchingOpen: false })
     void get().writeMeta('recent.json', recent)
   },
 
@@ -241,7 +246,7 @@ export const useStore = create<State & Actions>((set, get) => ({
   },
 
   setView(view) {
-    set({ view })
+    set(isCompact() ? { view, spoolOpen: false, stitchingOpen: false } : { view })
   },
 
   async saveThread(path, raw) {
@@ -255,6 +260,7 @@ export const useStore = create<State & Actions>((set, get) => ({
       threads: { ...s.threads, [path]: info },
       files: { ...s.files, [path]: { path, kind: 'thread', size: raw.length, mtime: info.mtime } },
     }))
+    recordActivity(path)
     if (useSettings.getState().loomUrl) await sync?.track(path, raw)
   },
 
@@ -321,6 +327,7 @@ export const useStore = create<State & Actions>((set, get) => ({
       if (await adapter.exists(oldNote)) await adapter.rename(oldNote, newNote)
     }
     await sync?.rename(from, to)
+    renameActivity(from, to)
     const active = get().active
     await get().refresh()
     if (active && (active === from || active.startsWith(from + '/'))) set({ active: to + active.slice(from.length) })
@@ -540,7 +547,10 @@ async function syncAssets() {
     const remote = await sync.manifest()
     const remoteSet = new Map(remote.map((r) => [r.path, r]))
     const localAll = new Map((await s.adapter.list()).map((e) => [e.path, e]))
+    const ownLog = `${META_DIR}/activity/${deviceId()}.json`
     for (const r of remote) {
+      // This device is the only writer of its own activity log.
+      if (r.path === ownLog) continue
       const local = localAll.get(r.path)
       if (!local || (local.size !== r.size && r.mtime > local.mtime)) {
         await s.adapter.writeBinary(r.path, await sync.pullAsset(r.path))
@@ -554,6 +564,7 @@ async function syncAssets() {
     }
     await s.refresh()
     useStore.setState({ dyeColors: await s.readMeta('dyes.json', s.dyeColors) })
+    await loadActivity()
   } catch (e) {
     console.warn('[loom] asset sync failed', e)
   }

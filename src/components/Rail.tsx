@@ -35,6 +35,9 @@ export function Rail() {
       <button className="rail__logo" title="Toggle the Spool (Ctrl+\)" onClick={() => set({ spoolOpen: !spoolOpen })}>
         <Mark size={24} />
       </button>
+      <button className="rail__btn rail__spoolbtn" onClick={() => set({ spoolOpen: !spoolOpen })} aria-label="Spool" title="Spool">
+        <Icon name="menu" size={20} />
+      </button>
       {ITEMS.map((i) => (
         <button key={i.view} className={'rail__btn' + (view === i.view ? ' is-on' : '')} onClick={() => setView(i.view)} aria-label={i.label}>
           <Icon name={i.icon} size={20} />
@@ -46,7 +49,7 @@ export function Rail() {
         <Icon name="search" size={20} />
         <span className="tip">Search · Ctrl K</span>
       </button>
-      <button className="rail__btn" onClick={() => setSettings({ theme: dark ? 'light' : 'dark' })} aria-label="Theme">
+      <button className="rail__btn rail__extra" onClick={() => setSettings({ theme: dark ? 'light' : 'dark' })} aria-label="Theme">
         <Icon name={dark ? 'sun' : 'moon'} size={20} />
         <span className="tip">{dark ? 'Light' : 'Dark'} mode</span>
       </button>
@@ -54,7 +57,7 @@ export function Rail() {
         <Icon name="settings" size={20} />
         <span className="tip">Make it yours</span>
       </button>
-      <button className="rail__orb" data-status={status} title={statusText} onClick={() => set({ settingsOpen: true })}>
+      <button className="rail__orb rail__extra" data-status={status} title={statusText} onClick={() => set({ settingsOpen: true })}>
         {pending > 0 && <i>{pending > 99 ? '99+' : pending}</i>}
       </button>
     </nav>

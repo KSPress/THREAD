@@ -26,6 +26,16 @@ export interface Settings {
   loomUrl: string
   loomToken: string
   spellcheck: boolean
+  /** Show system notifications for deadline reminders. */
+  notifications: boolean
+  /** Reminders used when a Thread doesn't set `remind:` (e.g. `1d`, `2h`, 0). */
+  defaultReminders: (string | number)[]
+  /** Google OAuth client id (Web client for browsers; Desktop client for the app). */
+  gcalClientId: string
+  /** Only for the desktop app's "Desktop app" OAuth client (Google calls it a secret; it isn't one). */
+  gcalClientSecret: string
+  gcalCalendarName: string
+  gcalAutoSync: boolean
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -44,6 +54,12 @@ export const DEFAULT_SETTINGS: Settings = {
   loomUrl: '',
   loomToken: '',
   spellcheck: true,
+  notifications: false,
+  defaultReminders: ['1d', 0],
+  gcalClientId: '',
+  gcalClientSecret: '',
+  gcalCalendarName: 'THREAD',
+  gcalAutoSync: true,
 }
 
 /** Dye palettes, from the reference boards. */

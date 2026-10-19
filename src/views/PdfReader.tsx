@@ -121,6 +121,25 @@ export function PdfReader({
     }
   }
 
+  // Touch devices select by long-press and never send mouseup, so also
+  // follow the document selection.
+  useEffect(() => {
+    let t: ReturnType<typeof setTimeout>
+    const onSel = () => {
+      clearTimeout(t)
+      t = setTimeout(() => {
+        const sel = window.getSelection()
+        const node = sel?.anchorNode
+        if (node && scroller.current?.contains(node)) onMouseUp()
+      }, 350)
+    }
+    document.addEventListener('selectionchange', onSel)
+    return () => {
+      clearTimeout(t)
+      document.removeEventListener('selectionchange', onSel)
+    }
+  })
+
   const onMouseUp = () => {
     const sel = window.getSelection()
     const text = sel?.toString().replace(/\s+/g, ' ').trim()
@@ -215,7 +234,11 @@ export function PdfReader({
         </aside>
       </div>
       {toolbar && (
-        <div className="hl-toolbar" style={{ left: toolbar.x - 160, top: Math.min(toolbar.y, innerHeight - 60) }} onMouseDown={(e) => e.preventDefault()}>
+        <div
+          className="hl-toolbar"
+          style={{ left: Math.max(8, Math.min(toolbar.x - 160, innerWidth - 340)), top: Math.min(toolbar.y, innerHeight - 70) }}
+          onMouseDown={(e) => e.preventDefault()}
+        >
           <span className="label">Dye →</span>
           {dyes.map((d) => (
             <button

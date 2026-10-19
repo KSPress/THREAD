@@ -4,6 +4,8 @@
 //! goes through these commands, which confine paths to the chosen vault root.
 //! Binary files travel as raw IPC bodies/responses instead of JSON arrays.
 
+mod google;
+
 use serde::Serialize;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
@@ -176,6 +178,18 @@ fn save_export(request: Request<'_>) -> CmdResult<()> {
     fs::write(target, body(&request)?).map_err(err)
 }
 
+/// A vault passed on the command line (`thread ~/Worlds`) or via THREAD_VAULT.
+#[tauri::command]
+fn startup_vault() -> Option<String> {
+    std::env::args()
+        .skip(1)
+        .find(|a| !a.starts_with('-'))
+        .or_else(|| std::env::var("THREAD_VAULT").ok())
+        .filter(|p| Path::new(p).is_dir())
+        .and_then(|p| fs::canonicalize(p).ok())
+        .map(|p| p.to_string_lossy().into_owned())
+}
+
 #[tauri::command]
 fn pandoc_available() -> bool {
     Command::new("pandoc").arg("--version").output().map(|o| o.status.success()).unwrap_or(false)
@@ -209,7 +223,7 @@ fn pandoc_convert(markdown: String, format: String) -> CmdResult<Response> {
 }
 
 /// Minimal percent-decoding for header values produced by `encodeURIComponent`.
-fn percent_decode(s: &str) -> String {
+pub(crate) fn percent_decode(s: &str) -> String {
     let bytes = s.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
     let mut i = 0;
@@ -231,6 +245,8 @@ fn percent_decode(s: &str) -> String {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             vault_list,
             vault_read_text,
@@ -242,8 +258,11 @@ pub fn run() {
             vault_mkdir,
             vault_exists,
             save_export,
+            startup_vault,
             pandoc_available,
-            pandoc_convert
+            pandoc_convert,
+            google::google_oauth_start,
+            google::google_oauth_refresh
         ])
         .run(tauri::generate_context!())
         .expect("error while running THREAD");

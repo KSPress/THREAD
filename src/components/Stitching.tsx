@@ -5,8 +5,12 @@ import { normalizeDye, type Frontmatter } from '../core/markdown'
 import { PALETTES, useSettings } from '../core/settings'
 import { Icon } from './Icon'
 import { DyeBadge } from './DyeBadge'
+import { Heatmap } from './Heatmap'
+import { GcalPill } from './Agenda'
+import { extractDeadlines, parseWhen } from '../../shared/deadlines.js'
+import { relativeDue, isOverdue } from '../core/deadlines'
 
-const RESERVED = new Set(['dyes', 'tags'])
+const RESERVED = new Set(['dyes', 'tags', 'deadline', 'due', 'remind', 'done'])
 
 export function Stitching() {
   const active = useStore((s) => s.active)
@@ -25,6 +29,16 @@ function StitchingBody({ thread }: { thread: ThreadInfo }) {
   const openStitch = useStore((s) => s.openStitch)
   const set = useStore((s) => s.set)
   const backlinks = useMemo(() => backlinksOf(thread.path, { files, threads }), [thread.path, files, threads])
+  // One card per Thread, even when it stitches here several times.
+  const grouped = useMemo(() => {
+    const map = new Map<string, { from: ThreadInfo; stitches: typeof backlinks[number]['stitch'][] }>()
+    for (const b of backlinks) {
+      const g = map.get(b.from.path) ?? { from: b.from, stitches: [] }
+      g.stitches.push(b.stitch)
+      map.set(b.from.path, g)
+    }
+    return [...map.values()]
+  }, [backlinks])
   const outline = useMemo(
     () => [...thread.body.matchAll(/^(#{1,4})\s+(.+)$/gm)].map((m) => ({ level: m[1].length, text: m[2].replace(/\[\[([^\]|]+\|)?([^\]]+)\]\]/g, '$2') })),
     [thread.body],
@@ -54,7 +68,7 @@ function StitchingBody({ thread }: { thread: ThreadInfo }) {
             <span>Words</span>
           </div>
           <div className="stat">
-            <b>{backlinks.length}</b>
+            <b>{grouped.length}</b>
             <span>Stitched</span>
           </div>
           <div className="stat">
@@ -65,24 +79,34 @@ function StitchingBody({ thread }: { thread: ThreadInfo }) {
       </section>
 
       <DyesModule thread={thread} />
+      <DeadlineModule thread={thread} />
       <PropertiesModule thread={thread} />
+      <section className="module">
+        <div className="module__head">
+          <span className="label">[ Woven on ]</span>
+        </div>
+        <div className="module__body">
+          <Heatmap path={thread.path} compact />
+        </div>
+      </section>
 
       <section className="module">
         <div className="module__head">
           <span className="label">[ Stitched from ]</span>
           <span className="spacer" />
           <span className="mono muted" style={{ fontSize: 11 }}>
-            {backlinks.length}
+            {grouped.length}
           </span>
         </div>
         <div className="module__body">
           {backlinks.length === 0 && <div className="empty-note">No Threads stitch here yet. Type [[{thread.name}]] anywhere.</div>}
-          {backlinks.map(({ from, stitch }, i) => (
-            <button key={from.path + i} className="backlink" onClick={() => open(from.path)}>
+          {grouped.map(({ from, stitches }) => (
+            <button key={from.path} className="backlink" onClick={() => open(from.path)}>
               <b>
                 <Icon name="stitch" size={13} /> {from.name}
+                {stitches.length > 1 && <span className="mono muted" style={{ marginLeft: 'auto', fontSize: 10.5 }}>×{stitches.length}</span>}
               </b>
-              <small>{contextLine(from.body, stitch.raw)}</small>
+              <small>{contextLine(from.body, stitches[0].raw)}</small>
             </button>
           ))}
         </div>
@@ -141,15 +165,20 @@ function StitchingBody({ thread }: { thread: ThreadInfo }) {
 }
 
 function contextLine(body: string, raw: string) {
-  const i = body.indexOf(`[[${raw}`)
+  const i = body.indexOf(`[[${raw}]]`)
   if (i < 0) return ''
   const start = body.lastIndexOf('\n', i) + 1
   let end = body.indexOf('\n', i)
   if (end < 0) end = body.length
   const line = body
     .slice(start, end)
-    .replace(/^[>#\-*\s|]+/, '')
-    .replace(/\[\[([^\]|]+\|)?([^\]]+)\]\]/g, '$2')
+    .replace(/`[^`]*`/g, '')
+    .replace(/^\s*(?:[>#]+|[-*+]\s+(?:\[[ xX]\]\s+)?|\d+\.\s+)/, '')
+    .replace(/\[\[([^\[\]|]+\|)?([^\[\]]+)\]\]/g, (_m, _a, b: string) => b.replace(/#.*$/, ''))
+    .replace(/\\\|/g, '|')
+    .replace(/(\*\*|__|==|~~)/g, '')
+    .replace(/^\|\s*|\s*\|$/g, '')
+    .trim()
   return line.length > 120 ? line.slice(0, 119) + '…' : line
 }
 
@@ -434,5 +463,107 @@ function Knob({ value, onChange }: { value: number; onChange: (v: number) => voi
       />
       <input className="knob-val" inputMode="decimal" value={value} onChange={(e) => onChange(Number(e.target.value) || 0)} />
     </>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+
+const REMINDERS: { value: string | number; label: string }[] = [
+  { value: 0, label: 'At time' },
+  { value: '1h', label: '1h' },
+  { value: '1d', label: '1 day' },
+  { value: '1w', label: '1 week' },
+]
+
+function DeadlineModule({ thread }: { thread: ThreadInfo }) {
+  const setFrontmatter = useStore((s) => s.setFrontmatter)
+  const fm = thread.frontmatter
+  const raw = (fm.deadline ?? fm.due) as string | undefined
+  const when = parseWhen(raw)
+  const [date, time] = typeof raw === 'string' ? raw.split(/[T ]/) : ['', '']
+  const remind = fm.remind === undefined ? null : Array.isArray(fm.remind) ? fm.remind : [fm.remind]
+  const items = useMemo(() => extractDeadlines(thread.path, thread.title, fm, thread.body), [thread])
+  const tasks = items.filter((d) => d.kind === 'task')
+  const own = items.find((d) => d.kind === 'thread')
+
+  const write = (patch: Record<string, unknown>) => {
+    const next: Frontmatter = { ...fm, ...patch }
+    for (const k of Object.keys(patch)) if (patch[k] === undefined) delete next[k]
+    if (next.due !== undefined && patch.deadline !== undefined) delete next.due
+    void setFrontmatter(thread.path, next)
+  }
+  const setWhen = (d: string, t: string) => write({ deadline: d ? (t ? `${d}T${t}` : d) : undefined, ...(d ? {} : { remind: undefined, done: undefined }) })
+  const toggleRemind = (v: string | number) => {
+    const cur = remind ?? ['1d', 0]
+    const has = cur.some((x) => String(x) === String(v))
+    const next = has ? cur.filter((x) => String(x) !== String(v)) : [...cur, v]
+    write({ remind: next.length ? next : 'none' })
+  }
+
+  return (
+    <section className="module">
+      <div className="module__head">
+        <span className="label">[ Deadline ]</span>
+        <span className="spacer" />
+        {when && <GcalPill />}
+      </div>
+      <div className="module__body">
+        <div className="deadline-row">
+          <input className="input" type="date" value={date ?? ''} onChange={(e) => setWhen(e.target.value, time ?? '')} aria-label="Deadline date" />
+          <input
+            className="input"
+            type="time"
+            value={time ?? ''}
+            disabled={!date}
+            onChange={(e) => setWhen(date ?? '', e.target.value)}
+            style={{ maxWidth: 112 }}
+            aria-label="Deadline time"
+          />
+        </div>
+        {when && own && (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <span className={'agenda__when'} style={isOverdue(own) && fm.done !== true ? { color: 'var(--coral)' } : undefined}>
+                {fm.done === true ? 'done' : relativeDue(own)}
+              </span>
+              <span className="spacer" />
+              <span className="label">Done</span>
+              <button className={'toggle toggle--h' + (fm.done === true ? ' is-on' : '')} onClick={() => write({ done: fm.done === true ? undefined : true })}>
+                <span />
+              </button>
+            </div>
+            <div className="label" style={{ marginBottom: 5 }}>
+              Remind me
+            </div>
+            <div className="remind-chips">
+              {REMINDERS.map((r) => {
+                const on = (remind ?? ['1d', 0]).some((x) => String(x) === String(r.value))
+                return (
+                  <button key={r.label} className={on ? 'is-on' : ''} onClick={() => toggleRemind(r.value)}>
+                    {r.label}
+                  </button>
+                )
+              })}
+            </div>
+          </>
+        )}
+        {!when && <div className="empty-note">Set a date to see it in Coming up, get reminders, and sync it to Google Calendar.</div>}
+        {tasks.length > 0 && (
+          <div style={{ marginTop: 12 }}>
+            <div className="label" style={{ marginBottom: 4 }}>
+              Dated tasks
+            </div>
+            {tasks.map((t) => (
+              <div key={t.key} className="prop" style={{ minHeight: 32 }}>
+                <span style={{ flex: 1, fontSize: 12.5 }}>☐ {t.title}</span>
+                <span className={'agenda__when'} style={isOverdue(t) ? { color: 'var(--coral)' } : undefined}>
+                  {relativeDue(t)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
   )
 }

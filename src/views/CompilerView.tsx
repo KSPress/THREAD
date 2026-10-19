@@ -213,6 +213,14 @@ export function CompilerView() {
                     <span className="ms-card__grip">
                       <Icon name="grip" size={18} />
                     </span>
+                    <span className="ms-card__move">
+                      <button aria-label="Move up" disabled={i === 0} onClick={() => move(i, i - 1)}>
+                        <Icon name="up" size={13} />
+                      </button>
+                      <button aria-label="Move down" disabled={i === ms.items.length - 1} onClick={() => move(i, i + 2)}>
+                        <Icon name="down" size={13} />
+                      </button>
+                    </span>
                     <span className="ms-card__num">
                       {it.role === 'title' ? '✦' : it.role === 'appendix' ? String.fromCharCode(64 + chapterNo) : it.role === 'front' ? '§' : String(chapterNo).padStart(2, '0')}
                     </span>

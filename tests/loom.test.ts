@@ -111,6 +111,17 @@ describe('the Loom', () => {
     s.sync.disconnect()
   })
 
+  it('serves every deadline as an iCalendar feed', async () => {
+    writeFileSync(join(dir, 'Due.md'), '---\ndeadline: 2026-12-24\n---\n# Midwinter draft\n\n- [ ] Polish 📅 2026-12-20\n')
+    expect((await fetch(`${URL}/calendar.ics`)).status).toBe(401)
+    const res = await fetch(`${URL}/calendar.ics?token=${TOKEN}`)
+    expect(res.headers.get('content-type')).toContain('text/calendar')
+    const ics = await res.text()
+    expect(ics).toContain('SUMMARY:⏳ Midwinter draft')
+    expect(ics).toContain('SUMMARY:☐ Polish')
+    expect(ics).toContain('DTSTART;VALUE=DATE:20261224')
+  })
+
   it('stores and serves assets, refusing path traversal', async () => {
     const put = await fetch(`${URL}/assets/Research/a.pdf`, { method: 'PUT', headers: { authorization: `Bearer ${TOKEN}` }, body: new Uint8Array([1, 2, 3]) })
     expect(put.status).toBe(204)

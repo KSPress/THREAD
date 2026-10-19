@@ -1,6 +1,8 @@
 // The Loom: home dashboard of the vault.
 import { useMemo, useState } from 'react'
+import { Agenda } from '../components/Agenda'
 import { DyeBadge } from '../components/DyeBadge'
+import { Heatmap } from '../components/Heatmap'
 import { Icon } from '../components/Icon'
 import { Mark } from '../components/Logo'
 import { folderNote, useStore, type ThreadInfo, useDyeColor } from '../core/store'
@@ -142,6 +144,18 @@ export function HomeView() {
               </div>
             </div>
           </div>
+        </div>
+
+        <div className="home__row">
+          <section className="card card--soft">
+            <Agenda />
+          </section>
+          <section className="card card--soft">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <span className="label">[ Activity · days woven, in Dye colors ]</span>
+            </div>
+            <Heatmap />
+          </section>
         </div>
 
         {filtered ? (

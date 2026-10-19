@@ -7,6 +7,8 @@ import { Spool } from './components/Spool'
 import { Stitching } from './components/Stitching'
 import { Welcome } from './components/Welcome'
 import { restoreVault } from './core/boot'
+import { startReminders } from './core/notify'
+import { startGoogleAutoSync } from './core/gcal'
 import { useStore, type View } from './core/store'
 import { useApplyTheme } from './core/theme'
 import { CanvasView } from './views/CanvasView'
@@ -31,6 +33,25 @@ export function App() {
   useEffect(() => {
     void restoreVault()
   }, [])
+
+  // Once a vault is open: reminders, Google auto-sync, and `#open=<path>`
+  // deep links (used by the links inside Google Calendar events).
+  useEffect(() => {
+    if (!adapter) return
+    startReminders()
+    startGoogleAutoSync()
+    const openFromHash = () => {
+      const m = /^#open=(.+)$/.exec(location.hash)
+      if (!m) return
+      const path = decodeURIComponent(m[1])
+      const s = useStore.getState()
+      if (s.threads[path]) s.open(path)
+      history.replaceState(null, '', location.pathname + location.search)
+    }
+    openFromHash()
+    window.addEventListener('hashchange', openFromHash)
+    return () => window.removeEventListener('hashchange', openFromHash)
+  }, [adapter])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -86,6 +107,9 @@ export function App() {
           </Suspense>
         </main>
         <Stitching />
+        {/* Tap-outside targets for the overlay panels on compact layouts. */}
+        {spoolOpen && <div className="scrim-tap scrim-tap--spool" onClick={() => useStore.getState().set({ spoolOpen: false })} />}
+        {showStitching && <div className="scrim-tap scrim-tap--stitching" onClick={() => useStore.getState().set({ stitchingOpen: false })} />}
       </div>
       <CommandPalette />
       <SettingsPanel />
