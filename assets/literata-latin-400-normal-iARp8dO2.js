@@ -1,0 +1,1 @@
+var e=`/THREAD/assets/literata-latin-400-normal-CUhpYSl8.woff`;export{e as default};
