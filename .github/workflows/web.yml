@@ -1,0 +1,40 @@
+# Builds the browser version and publishes it to GitHub Pages (branch gh-pages).
+# One-time: Settings → Pages → "Deploy from a branch" → gh-pages / (root).
+# Then THREAD lives at https://<owner>.github.io/<repo>/ and installs as an app
+# from the browser menu on Android, iPhone, iPad, Windows and macOS.
+name: Web app (GitHub Pages)
+
+on:
+  push:
+    branches: [main, 'claude/**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Build for /${{ github.event.repository.name }}/
+        run: npx vite build
+        env:
+          THREAD_BASE: /${{ github.event.repository.name }}/
+      - uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          publish_branch: gh-pages
+          force_orphan: true
+          commit_message: 'Publish THREAD web app'

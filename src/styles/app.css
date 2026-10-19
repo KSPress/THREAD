@@ -3977,3 +3977,8 @@ button.dye:hover {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+@media (max-width: 600px), (hover: none) {
+  .pinboard-overlay__bar .muted {
+    display: none;
+  }
+}

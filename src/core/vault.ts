@@ -25,6 +25,9 @@ export interface VaultAdapter {
 }
 
 export const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+export const isMobileOS = () => typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+/** The native desktop app (Windows/macOS/Linux), as opposed to the Android/iOS app or a browser. */
+export const isDesktopApp = () => isTauri() && !isMobileOS()
 
 /* ------------------------------------------------------------------ */
 /* Browser vault — IndexedDB. Used on the web, iPad/mobile PWAs and as  */

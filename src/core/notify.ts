@@ -6,6 +6,7 @@ import { useStore } from './store'
 import { isTauri } from './vault'
 
 const SENT_KEY = 'thread.reminders.sent'
+const ICON = `${import.meta.env.BASE_URL}icons/icon-192.png`
 /** Reminders older than this when first noticed are skipped, not fired late. */
 const GRACE = 6 * 3600000
 
@@ -46,9 +47,9 @@ export async function showNotification(title: string, body: string, path?: strin
     if (!('Notification' in window) || Notification.permission !== 'granted') return false
     // Android Chrome only allows notifications through a service worker.
     const reg = await navigator.serviceWorker?.getRegistration?.()
-    if (reg) await reg.showNotification(title, { body, icon: '/icons/icon-192.png', badge: '/icons/icon-192.png', data, tag: path })
+    if (reg) await reg.showNotification(title, { body, icon: ICON, badge: ICON, data, tag: path })
     else {
-      const n = new Notification(title, { body, icon: '/icons/icon-192.png', tag: path })
+      const n = new Notification(title, { body, icon: ICON, tag: path })
       n.onclick = () => {
         window.focus()
         if (path) useStore.getState().open(path)

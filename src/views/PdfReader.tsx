@@ -58,9 +58,9 @@ export function PdfReader({
         const data = await adapter!.readBinary(path)
         const task = pdfjs.getDocument({
           data,
-          cMapUrl: '/pdfjs/cmaps/',
+          cMapUrl: `${import.meta.env.BASE_URL}pdfjs/cmaps/`,
           cMapPacked: true,
-          standardFontDataUrl: '/pdfjs/standard_fonts/',
+          standardFontDataUrl: `${import.meta.env.BASE_URL}pdfjs/standard_fonts/`,
         })
         loaded = await task.promise
         const s: { w: number; h: number }[] = []

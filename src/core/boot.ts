@@ -1,7 +1,7 @@
 // Choosing, remembering and reopening vaults.
 import { seedVault } from './seed'
 import { useStore } from './store'
-import { BrowserVault, FolderVault, isTauri, TauriVault, type VaultAdapter } from './vault'
+import { BrowserVault, FolderVault, isDesktopApp, isTauri, TauriVault, type VaultAdapter } from './vault'
 
 const LAST = 'thread.lastVault'
 
@@ -33,12 +33,12 @@ export async function restoreVault() {
   }
   const last = lastVault()
   if (!last) return
-  if (last.kind === 'tauri' && isTauri()) await openAdapter(new TauriVault(last.root))
+  if (last.kind === 'tauri' && isDesktopApp()) await openAdapter(new TauriVault(last.root))
   else if (last.kind === 'browser') await openAdapter(new BrowserVault(last.name))
 }
 
 export async function pickFolder(): Promise<boolean> {
-  if (isTauri()) {
+  if (isDesktopApp()) {
     const v = await TauriVault.pick()
     if (!v) return false
     await openAdapter(v, { seed: true })

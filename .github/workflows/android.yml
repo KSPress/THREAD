@@ -1,0 +1,82 @@
+# Builds the THREAD Android app (one universal APK for phones and tablets).
+# Download it from the run's "Artifacts" section and open it on the device.
+#
+# Signing: if the repository secrets ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD
+# are set, that key signs every build, so updates install over each other.
+# Without them a throwaway key is generated (uninstall before installing a newer build).
+name: Android app
+
+on:
+  push:
+    branches: [main, 'claude/**']
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      - name: Generate the Android project
+        env:
+          NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
+        run: |
+          npx tauri android init --ci
+          npx tauri icon src-tauri/app-icon.png
+          # Exports are written to Download/THREAD; Android 9 and older need this permission.
+          sed -i 's#<application#<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />\n    <application android:requestLegacyExternalStorage="true"#' \
+            src-tauri/gen/android/app/src/main/AndroidManifest.xml
+
+      - name: Build APK
+        env:
+          NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
+        run: npx tauri android build --apk --target aarch64 --target armv7 --target x86_64
+
+      - name: Sign APK
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          set -e
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          UNSIGNED=$(find src-tauri/gen/android/app/build/outputs/apk -name '*-unsigned.apk' | head -1)
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > thread.jks
+            PASS="$KEYSTORE_PASS"
+          else
+            PASS=throwaway-$RANDOM$RANDOM
+            keytool -genkeypair -keystore thread.jks -storepass "$PASS" -keypass "$PASS" -alias thread \
+              -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=THREAD, O=KSPress"
+          fi
+          mkdir -p out
+          "$BT/zipalign" -f -p 4 "$UNSIGNED" aligned.apk
+          "$BT/apksigner" sign --ks thread.jks --ks-pass "pass:$PASS" --out out/THREAD.apk aligned.apk
+          "$BT/apksigner" verify out/THREAD.apk
+          rm -f thread.jks
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: THREAD-android
+          path: out/THREAD.apk
+          if-no-files-found: error

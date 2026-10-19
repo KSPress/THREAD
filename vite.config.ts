@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react'
 
 // Tauri expects a fixed dev port and does not want the screen cleared.
 export default defineConfig({
+  // THREAD_BASE=/THREAD/ when hosted under a sub-path (GitHub Pages).
+  base: process.env.THREAD_BASE ?? '/',
   plugins: [react()],
   clearScreen: false,
   server: { port: 1420, strictPort: true },

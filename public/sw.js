@@ -1,10 +1,12 @@
 // THREAD service worker: offline app shell + notification taps.
 // Built assets are content-hashed, so they are cached forever on first use;
 // the HTML shell is network-first so new releases arrive when online.
-const CACHE = 'thread-v1'
+const CACHE = 'thread-v2'
+// Everything is relative to where THREAD is hosted (site root, /THREAD/ on GitHub Pages, …).
+const BASE = new URL(self.registration.scope).pathname
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(['/', '/manifest.webmanifest', '/thread.svg'])))
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll([BASE, BASE + 'manifest.webmanifest', BASE + 'thread.svg'])))
   self.skipWaiting()
 })
 
@@ -21,14 +23,14 @@ self.addEventListener('fetch', (e) => {
       fetch(req)
         .then((res) => {
           const copy = res.clone()
-          caches.open(CACHE).then((c) => c.put('/', copy))
+          caches.open(CACHE).then((c) => c.put(BASE, copy))
           return res
         })
-        .catch(() => caches.match('/')),
+        .catch(() => caches.match(BASE)),
     )
     return
   }
-  if (/^\/(assets|excalidraw|pdfjs|icons)\//.test(url.pathname)) {
+  if (/^(assets|excalidraw|pdfjs|icons)\//.test(url.pathname.slice(BASE.length))) {
     e.respondWith(
       caches.match(req).then(
         (hit) =>
@@ -48,7 +50,7 @@ self.addEventListener('fetch', (e) => {
 self.addEventListener('notificationclick', (e) => {
   e.notification.close()
   const path = e.notification.data?.path
-  const target = path ? `/#open=${encodeURIComponent(path)}` : '/'
+  const target = path ? `${BASE}#open=${encodeURIComponent(path)}` : BASE
   e.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
       for (const c of list) {

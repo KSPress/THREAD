@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { lastVault, openAdapter, pickFolder, reopenFolder } from '../core/boot'
 import { useSettings } from '../core/settings'
-import { BrowserVault, FolderVault, isTauri } from '../core/vault'
+import { BrowserVault, FolderVault, isDesktopApp } from '../core/vault'
 import { Icon } from './Icon'
 import { Logo } from './Logo'
 
@@ -10,7 +10,7 @@ export function Welcome() {
   const [loom, setLoom] = useState(false)
   const [url, setUrl] = useState(useSettings.getState().loomUrl || 'http://localhost:7878')
   const [token, setToken] = useState(useSettings.getState().loomToken)
-  const canPick = isTauri() || FolderVault.supported()
+  const canPick = isDesktopApp() || FolderVault.supported()
   const last = lastVault()
 
   const run = async (fn: () => Promise<unknown>) => {
@@ -58,7 +58,7 @@ export function Welcome() {
             <span>
               <b>Open a folder vault</b>
               <br />
-              <small>{canPick ? 'Use any folder of .md files — works side by side with Obsidian.' : 'Needs the desktop app or a Chromium browser.'}</small>
+              <small>{canPick ? 'Use any folder of .md files — works side by side with Obsidian.' : 'Needs the desktop app or Chrome/Edge on a computer. On phones, Threads are kept inside THREAD — connect a Loom to share them.'}</small>
             </span>
           </button>
           <button

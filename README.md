@@ -142,6 +142,14 @@ npm test               # editor round-trip, core, exports, and a live Loom with 
 npm run build          # production web build in dist/
 ```
 
+### Downloads (built automatically on every push)
+
+| Platform | Where |
+| --- | --- |
+| Windows, macOS, Linux | Actions → **Desktop installers** → Artifacts |
+| Android | Actions → **Android app** → Artifacts → `THREAD.apk` |
+| Browser (any device) | https://kspress.github.io/THREAD/, published by **Web app (GitHub Pages)**. One-time setup: Settings → Pages → Deploy from a branch → `gh-pages` / root. |
+
 ### Phones and tablets
 
 Serve the production build (`npm run build`, then any static host or `npx vite preview --host`) and open it on the device. Use **Add to Home Screen** to install it. On iPhone this step is required for notifications.

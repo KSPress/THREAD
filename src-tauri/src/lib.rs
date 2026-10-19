@@ -190,6 +190,27 @@ fn startup_vault() -> Option<String> {
         .map(|p| p.to_string_lossy().into_owned())
 }
 
+/// Mobile: write an export into the shared Download/THREAD folder; returns where it went.
+#[tauri::command]
+fn save_to_downloads(app: tauri::AppHandle, request: Request<'_>) -> CmdResult<String> {
+    let name = header(&request, "x-name")?;
+    if name.contains(['/', '\\']) || name.starts_with('.') {
+        return Err("invalid file name".into());
+    }
+    #[cfg(target_os = "android")]
+    let base = { let _ = &app; PathBuf::from("/storage/emulated/0/Download") };
+    #[cfg(not(target_os = "android"))]
+    let base = {
+        use tauri::Manager;
+        app.path().download_dir().map_err(err)?
+    };
+    let dir = base.join("THREAD");
+    fs::create_dir_all(&dir).map_err(err)?;
+    let target = dir.join(&name);
+    fs::write(&target, body(&request)?).map_err(err)?;
+    Ok(target.to_string_lossy().into_owned())
+}
+
 #[tauri::command]
 fn pandoc_available() -> bool {
     Command::new("pandoc").arg("--version").output().map(|o| o.status.success()).unwrap_or(false)
@@ -259,6 +280,7 @@ pub fn run() {
             vault_exists,
             save_export,
             startup_vault,
+            save_to_downloads,
             pandoc_available,
             pandoc_convert,
             google::google_oauth_start,

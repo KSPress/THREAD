@@ -302,7 +302,7 @@ function CalendarSettings() {
   useEffect(() => {
     void notificationPermission().then(setPerm)
   }, [])
-  const desktop = isTauri()
+  const desktop = isTauri() // desktop and Android apps use the loopback OAuth flow
   const feed = loomUrl ? `${loomUrl.replace(/\/$/, '')}/calendar.ics?token=${encodeURIComponent(loomToken)}` : ''
 
   return (

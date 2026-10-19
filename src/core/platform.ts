@@ -1,5 +1,5 @@
 // Host integration: saving exported files and running Pandoc.
-import { isTauri } from './vault'
+import { isDesktopApp, isTauri } from './vault'
 
 const MIME: Record<string, string> = {
   pdf: 'application/pdf',
@@ -13,6 +13,14 @@ const MIME: Record<string, string> = {
 export async function saveFile(name: string, data: Uint8Array | string): Promise<boolean> {
   const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data
   const ext = name.split('.').pop() ?? ''
+  if (isTauri() && !isDesktopApp()) {
+    // Android: no save dialog or blob downloads in the WebView, so write to Download/THREAD.
+    const { invoke } = await import('@tauri-apps/api/core')
+    const where = await invoke<string>('save_to_downloads', bytes, { headers: { 'x-name': encodeURIComponent(name) } })
+    const { useStore } = await import('./store')
+    useStore.getState().notify(`Saved to ${where}`)
+    return true
+  }
   if (isTauri()) {
     const { save } = await import('@tauri-apps/plugin-dialog')
     const target = await save({ defaultPath: name, filters: [{ name: ext.toUpperCase(), extensions: [ext] }] })
@@ -33,7 +41,7 @@ export async function saveFile(name: string, data: Uint8Array | string): Promise
 
 /** Pandoc is only reachable from the desktop host. */
 export async function pandocAvailable(): Promise<boolean> {
-  if (!isTauri()) return false
+  if (!isDesktopApp()) return false
   const { invoke } = await import('@tauri-apps/api/core')
   return invoke<boolean>('pandoc_available').catch(() => false)
 }
