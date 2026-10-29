@@ -404,8 +404,8 @@ dyes: [research]
 /** Find where a sentence sits on a PDF page, as normalized line boxes. */
 async function locateText(pdf: Uint8Array, pageNo: number, needle: string) {
   try {
-    const pdfjs = await import('pdfjs-dist')
-    const { default: workerUrl } = await import('pdfjs-dist/build/pdf.worker.min.mjs?url')
+    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
+    const { default: workerUrl } = await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url')
     pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
     const doc = await pdfjs.getDocument({ data: pdf.slice() }).promise
     const page = await doc.getPage(pageNo)

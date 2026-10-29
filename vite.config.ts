@@ -42,7 +42,7 @@ export default defineConfig(({ command }) => ({
   // Lazily imported heavy deps, pre-bundled so the dev server never reloads mid-session.
   optimizeDeps: {
     include: [
-      'pdfjs-dist',
+      'pdfjs-dist/legacy/build/pdf.mjs',
       'pdfmake/build/pdfmake',
       'pdfmake/build/vfs_fonts',
       'docx',

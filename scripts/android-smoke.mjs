@@ -93,6 +93,16 @@ if (scenario === 'sample') {
     return evaluate(`(() => { const b = document.querySelector('.palette__item'); b?.click(); return !!b })()`)
   })
   await step('editor shown', () => waitFor('.thread-editor', 20000))
+  await step('open the sample PDF beside it', async () => {
+    await evaluate(`document.querySelector('[aria-label="Search"]')?.click()`)
+    await wait(600)
+    await fill('.palette input', 'Field Notes')
+    await wait(600)
+    return evaluate(`(() => { const b = [...document.querySelectorAll('.palette__item')].find((x) => x.textContent.includes('.pdf')); b?.click(); return !!b })()`)
+  })
+  await step('PDF pages render', () => waitFor('.pdf-page canvas', 30000))
+  await wait(3000)
+  await step('PDF text layer', () => waitFor('.pdf-page .textLayer span', 20000))
 }
 if (scenario === 'loom') {
   await step('open Loom form', () => clickText('Connect to a Loom'))

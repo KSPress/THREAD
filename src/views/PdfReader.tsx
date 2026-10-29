@@ -1,6 +1,8 @@
 // pdf.js reader with coordinate-level highlights (the research half of the Desk).
-import * as pdfjs from 'pdfjs-dist'
-import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+// The legacy build carries its own polyfills: Android's web view (and older
+// Safari) lack newer JavaScript the modern build relies on.
+import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs'
+import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { QUOTE_MIME, useStore, type Highlight, type QuoteDrag, useDyeColor } from '../core/store'
 import { Icon } from '../components/Icon'

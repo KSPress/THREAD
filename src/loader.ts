@@ -5,6 +5,30 @@
 // native features are the same either way. Offline, or if the live build
 // cannot load, the bundled build starts.
 
+// Small polyfills for older web views (Android System WebView, older Safari),
+// installed before any app code runs.
+if (!('withResolvers' in Promise)) {
+  ;(Promise as any).withResolvers = function () {
+    let resolve!: (v: unknown) => void
+    let reject!: (e: unknown) => void
+    const promise = new Promise((a, b) => ((resolve = a), (reject = b)))
+    return { promise, resolve, reject }
+  }
+}
+if (!Array.prototype.findLast) {
+  Object.defineProperty(Array.prototype, 'findLast', {
+    configurable: true,
+    writable: true,
+    value: function <T>(this: T[], fn: (v: T, i: number, a: T[]) => unknown) {
+      for (let i = this.length - 1; i >= 0; i--) if (fn(this[i], i, this)) return this[i]
+      return undefined
+    },
+  })
+}
+if (!Object.hasOwn) {
+  Object.defineProperty(Object, 'hasOwn', { configurable: true, writable: true, value: (o: object, k: PropertyKey) => Object.prototype.hasOwnProperty.call(o, k) })
+}
+
 const SETTINGS_KEY = 'thread.settings.v1'
 const TIMEOUT = 2500
 
