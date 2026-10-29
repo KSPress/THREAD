@@ -27,10 +27,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
-      - name: Build for /${{ github.event.repository.name }}/
-        run: npx vite build
-        env:
-          THREAD_BASE: /${{ github.event.repository.name }}/
+      # Relative asset paths, so the same build serves /<repo>/ and is the live
+      # build the desktop and Android apps update from (version.json).
+      - run: npx vite build
       - uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}

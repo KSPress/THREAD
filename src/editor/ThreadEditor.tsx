@@ -9,6 +9,7 @@ import { useSettings } from '../core/settings'
 import { kindOf, stem } from '../core/paths'
 import { parseStitch } from '../core/markdown'
 import { editorExtensions } from './extensions'
+import { onBeforeReload } from '../core/update'
 
 const SAVE_DELAY = 450
 
@@ -24,7 +25,7 @@ export function ThreadEditor({ path, onEditor }: { path: string; onEditor?: (e: 
     const pending = pendingEdits.get(p)
     if (pending === undefined) return
     pendingEdits.delete(p)
-    void useStore.getState().saveBody(p, pending)
+    return useStore.getState().saveBody(p, pending)
   }
 
   const editor = useEditor(
@@ -69,12 +70,14 @@ export function ThreadEditor({ path, onEditor }: { path: string; onEditor?: (e: 
   }
 
   // Save on switch / unmount.
-  useEffect(() => () => flush(path), [path])
+  useEffect(() => () => void flush(path), [path])
   useEffect(() => {
-    const onHide = () => flush(path)
+    const onHide = () => void flush(path)
+    const unregister = onBeforeReload(() => flush(path))
     window.addEventListener('beforeunload', onHide)
     document.addEventListener('visibilitychange', onHide)
     return () => {
+      unregister()
       window.removeEventListener('beforeunload', onHide)
       document.removeEventListener('visibilitychange', onHide)
     }

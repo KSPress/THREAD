@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react'
 import { connectGoogle, disconnectGoogle, syncGoogle, useGcal } from '../core/gcal'
 import { notificationPermission, requestNotifications, showNotification } from '../core/notify'
 import { isTauri } from '../core/vault'
+import { applyUpdate, BUILD, buildLabel, checkForUpdate, runningLive, useUpdate } from '../core/update'
 
 const BACKDROPS: { kind: Exclude<BackdropKind, 'image'>; label: string }[] = [
   { kind: 'halftone', label: 'Halftone' },
@@ -236,6 +237,8 @@ export function SettingsPanel() {
             </div>
           </div>
 
+          <UpdateSettings />
+
           <CalendarSettings />
 
           <h3>The Loom (Host)</h3>
@@ -276,7 +279,7 @@ export function SettingsPanel() {
             </button>
           </div>
           <p className="muted mono" style={{ fontSize: 10.5, marginTop: 18 }}>
-            THREAD v0.1 · defaults: {DEFAULT_SETTINGS.backdrop} / blur {DEFAULT_SETTINGS.blur} / {DEFAULT_SETTINGS.palette}
+            THREAD v0.1 · build {BUILD.commit} · defaults: {DEFAULT_SETTINGS.backdrop} / blur {DEFAULT_SETTINGS.blur} / {DEFAULT_SETTINGS.palette}
           </p>
         </div>
       </div>
@@ -454,6 +457,51 @@ function CalendarSettings() {
           </button>
         )}
       </div>
+    </>
+  )
+}
+
+function UpdateSettings() {
+  const st = useSettings()
+  const u = useUpdate()
+  const app = isTauri()
+  const where = !app ? 'this website' : runningLive() ? 'the live build from the web' : 'the copy inside this app'
+  return (
+    <>
+      <h3>Updates</h3>
+      <p className="muted" style={{ marginTop: -4, fontSize: 13 }}>
+        {app
+          ? 'Each time THREAD starts, it loads the newest published version when you are online. Your vault and settings stay on this device. Offline, it starts the version built into the app.'
+          : 'THREAD checks for a newer version while it is open and offers to reload. Installed (Add to Home Screen) copies update the same way.'}
+      </p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <span className="mono" style={{ fontSize: 12 }}>
+          Running {buildLabel(BUILD)} · {where}
+        </span>
+        <span className="spacer" />
+        {u.status === 'available' && u.remote ? (
+          <button className="btn btn--accent" onClick={() => void applyUpdate()}>
+            <Icon name="sync" size={14} /> Update to {u.remote.commit}
+          </button>
+        ) : (
+          <button className="btn" disabled={u.status === 'checking'} onClick={() => void checkForUpdate()}>
+            <Icon name="sync" size={14} /> {u.status === 'checking' ? 'Checking…' : 'Check for updates'}
+          </button>
+        )}
+      </div>
+      {u.checkedAt && u.status !== 'checking' && (
+        <p className="mono muted" style={{ fontSize: 11, marginTop: 6 }}>
+          {u.status === 'current' ? 'Up to date.' : u.status === 'offline' ? 'Could not reach the update server.' : u.remote ? `New: ${buildLabel(u.remote)}` : ''}
+        </p>
+      )}
+      {app && (
+        <div className="settings__row" style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 10 }}>
+          <button className={'toggle toggle--h' + (st.liveUpdates ? ' is-on' : '')} onClick={() => st.set({ liveUpdates: !st.liveUpdates })}>
+            <span />
+          </button>
+          <span style={{ fontSize: 13 }}>Load the newest version at launch</span>
+        </div>
+      )}
     </>
   )
 }

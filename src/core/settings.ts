@@ -39,6 +39,8 @@ export interface Settings {
   gcalClientSecret: string
   gcalCalendarName: string
   gcalAutoSync: boolean
+  /** Desktop/Android apps: start the newest published build (GitHub Pages) when it is newer. */
+  liveUpdates: boolean
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -64,6 +66,7 @@ export const DEFAULT_SETTINGS: Settings = {
   gcalClientSecret: '',
   gcalCalendarName: 'THREAD',
   gcalAutoSync: true,
+  liveUpdates: true,
 }
 
 /** Dye palettes, from the reference boards. */

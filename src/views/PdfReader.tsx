@@ -4,6 +4,7 @@ import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useStore, type Highlight, useDyeColor } from '../core/store'
 import { Icon } from '../components/Icon'
+import { BASE } from '../core/base'
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
 
@@ -58,9 +59,9 @@ export function PdfReader({
         const data = await adapter!.readBinary(path)
         const task = pdfjs.getDocument({
           data,
-          cMapUrl: `${import.meta.env.BASE_URL}pdfjs/cmaps/`,
+          cMapUrl: `${BASE}pdfjs/cmaps/`,
           cMapPacked: true,
-          standardFontDataUrl: `${import.meta.env.BASE_URL}pdfjs/standard_fonts/`,
+          standardFontDataUrl: `${BASE}pdfjs/standard_fonts/`,
         })
         loaded = await task.promise
         const s: { w: number; h: number }[] = []

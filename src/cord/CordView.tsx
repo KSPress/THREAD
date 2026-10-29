@@ -14,6 +14,7 @@ import { cordExtensions, pagesKey, spacerDecorations } from './extensions'
 import { computeLayout, layoutSignature, PAGE_GAP, pageBox, type Layout } from './layout'
 import { cordToMarkdown, fillTokens, fontStack, parseCord, serializeCord, type CordFile } from './model'
 import { Ribbon, type ExportKind } from './Ribbon'
+import { onBeforeReload } from '../core/update'
 
 const SAVE_DELAY = 500
 
@@ -24,7 +25,7 @@ export function flushCord(path: string) {
   const take = dirtyCords.get(path)
   if (!take) return
   dirtyCords.delete(path)
-  void useStore.getState().saveThread(path, serializeCord(take()))
+  return useStore.getState().saveThread(path, serializeCord(take()))
 }
 
 export default function CordView({ path }: { path: string }) {
@@ -172,11 +173,13 @@ export default function CordView({ path }: { path: string }) {
 
   // Save on switch / unmount / hide.
   useEffect(() => {
-    const onHide = () => flushCord(path)
+    const onHide = () => void flushCord(path)
+    const unregister = onBeforeReload(() => flushCord(path))
     window.addEventListener('beforeunload', onHide)
     document.addEventListener('visibilitychange', onHide)
     return () => {
-      flushCord(path)
+      void flushCord(path)
+      unregister()
       window.removeEventListener('beforeunload', onHide)
       document.removeEventListener('visibilitychange', onHide)
     }

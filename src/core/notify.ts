@@ -4,9 +4,10 @@ import { allDeadlines, reminderTimes, relativeDue, type Deadline } from './deadl
 import { useSettings } from './settings'
 import { useStore } from './store'
 import { isTauri } from './vault'
+import { BASE } from './base'
 
 const SENT_KEY = 'thread.reminders.sent'
-const ICON = `${import.meta.env.BASE_URL}icons/icon-192.png`
+const ICON = `${BASE}icons/icon-192.png`
 /** Reminders older than this when first noticed are skipped, not fired late. */
 const GRACE = 6 * 3600000
 

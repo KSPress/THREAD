@@ -1,4 +1,5 @@
-import { lazy, Suspense, useEffect } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
+import { Icon } from './components/Icon'
 import { Backdrop } from './components/Backdrop'
 import { CommandPalette } from './components/CommandPalette'
 import { Rail } from './components/Rail'
@@ -9,6 +10,7 @@ import { Welcome } from './components/Welcome'
 import { restoreVault } from './core/boot'
 import { startReminders } from './core/notify'
 import { startGoogleAutoSync } from './core/gcal'
+import { applyUpdate, buildLabel, startUpdateWatch, useUpdate } from './core/update'
 import { useStore, type View } from './core/store'
 import { useApplyTheme } from './core/theme'
 import { CanvasView } from './views/CanvasView'
@@ -32,6 +34,7 @@ export function App() {
 
   useEffect(() => {
     void restoreVault()
+    startUpdateWatch()
   }, [])
 
   // Once a vault is open: reminders, Google auto-sync, and `#open=<path>`
@@ -113,11 +116,34 @@ export function App() {
       </div>
       <CommandPalette />
       <SettingsPanel />
+      <UpdateBanner />
       {toast && (
         <div className="toast" key={toast.id}>
           {toast.text}
         </div>
       )}
     </>
+  )
+}
+
+/** "A newer THREAD is ready" — applying it saves open edits, then reloads. */
+function UpdateBanner() {
+  const u = useUpdate()
+  const [busy, setBusy] = useState(false)
+  if (u.status !== 'available' || !u.remote || u.dismissed === u.remote.id) return null
+  return (
+    <div className="update-banner" role="status">
+      <Icon name="sync" size={15} />
+      <span>
+        <b>A newer THREAD is ready</b>
+        <small className="mono">{buildLabel(u.remote)}</small>
+      </span>
+      <button className="btn btn--accent" disabled={busy} onClick={() => (setBusy(true), void applyUpdate())}>
+        {busy ? 'Saving…' : 'Update now'}
+      </button>
+      <button className="icon-btn" title="Later" onClick={() => useUpdate.setState({ dismissed: u.remote!.id })}>
+        <Icon name="close" size={14} />
+      </button>
+    </div>
   )
 }
