@@ -5583,3 +5583,52 @@ button.dye:hover {
 .welcome__vaults .label {
   width: 100%;
 }
+
+/* Google Drive */
+.drive-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13px;
+}
+.drive-dot,
+.drive-badge i {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: #3aa65b;
+}
+.drive-dot.is-syncing,
+.drive-badge.is-syncing i {
+  background: var(--accent);
+  animation: drive-pulse 1s ease-in-out infinite;
+}
+.drive-dot.is-expired,
+.drive-dot.is-error,
+.drive-badge.is-expired i,
+.drive-badge.is-error i {
+  background: var(--coral);
+}
+.drive-dot.is-offline,
+.drive-badge.is-offline i {
+  background: var(--muted);
+}
+.drive-badge {
+  position: relative;
+}
+.drive-badge i {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  width: 7px;
+  height: 7px;
+  margin: 0;
+  box-shadow: 0 0 0 2px var(--paper);
+}
+@keyframes drive-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}

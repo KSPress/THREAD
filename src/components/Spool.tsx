@@ -8,6 +8,7 @@ import { DyeEditor, DyePicker } from './DyeEditor'
 import { ThreadIcon } from './ThreadIcon'
 import { ThreadStylePop } from './ThreadStyle'
 import { Logo } from './Logo'
+import { syncNow, useDrive } from '../core/gdrive'
 
 interface TreeNode {
   path: string
@@ -210,6 +211,7 @@ export function Spool() {
             {adapter?.name}
           </span>
           <span className="spacer" />
+          <DriveBadge />
           <button className="icon-btn" title="Collapse the Spool" onClick={() => set({ spoolOpen: false })}>
             <Icon name="panelLeft" size={17} />
           </button>
@@ -821,4 +823,18 @@ function buildTree(files: Record<string, FileInfo>, threads: Record<string, unkn
 
 function countThreads(n: TreeNode): number {
   return n.children.reduce((s, c) => s + (c.file.kind === 'thread' ? 1 : 0) + countThreads(c), 0)
+}
+
+/** Google Drive sync state for the open vault; click to sync now. */
+function DriveBadge() {
+  const d = useDrive()
+  if (!d.folder) return null
+  const label =
+    d.status === 'syncing' ? 'Syncing with Google Drive…' : d.status === 'expired' ? 'Google Drive: signed out — reconnect in Make it yours' : d.status === 'offline' ? 'Google Drive: offline' : d.status === 'error' ? `Google Drive: ${d.error}` : `In step with Google Drive${d.lastSync ? ` · ${new Date(d.lastSync).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}` : ''}`
+  return (
+    <button className={'icon-btn drive-badge is-' + d.status} title={label} aria-label={label} onClick={() => (d.status === 'expired' ? useStore.getState().set({ settingsOpen: true }) : void syncNow())}>
+      <Icon name="cloud" size={16} />
+      <i />
+    </button>
+  )
 }

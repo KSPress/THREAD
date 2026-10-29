@@ -11,17 +11,12 @@ import type { Deadline } from '../../shared/deadlines.js'
 import { allDeadlines } from './deadlines'
 import { useSettings } from './settings'
 import { useStore } from './store'
+import { createGoogleAuth, GoogleAuthError } from './google'
 import { isTauri } from './vault'
 
 export const GCAL_SCOPE = 'https://www.googleapis.com/auth/calendar.app.created'
 const API = 'https://www.googleapis.com/calendar/v3'
 const TOKEN_KEY = 'thread.gcal.token'
-
-interface Token {
-  access_token: string
-  expires_at: number
-  refresh_token?: string
-}
 
 type Status = 'disconnected' | 'connecting' | 'connected' | 'syncing' | 'expired' | 'error'
 
@@ -32,78 +27,19 @@ interface GcalState {
   lastResult?: { created: number; updated: number; deleted: number }
 }
 
-export const useGcal = create<GcalState>(() => ({ status: loadToken() ? 'connected' : 'disconnected' }))
+const auth = createGoogleAuth({ key: TOKEN_KEY, scope: GCAL_SCOPE, what: 'Google Calendar' })
 
-function loadToken(): Token | null {
-  try {
-    // Browsers keep only the short-lived access token (session); the desktop
-    // app also keeps its refresh token so it can reconnect after a restart.
-    const raw = (isTauri() ? localStorage : sessionStorage).getItem(TOKEN_KEY)
-    const t = raw ? (JSON.parse(raw) as Token) : null
-    if (!t) return null
-    if (t.expires_at < Date.now() + 60_000 && !t.refresh_token) return null
-    return t
-  } catch {
-    return null
-  }
-}
-
-function saveToken(t: Token | null) {
-  const store = isTauri() ? localStorage : sessionStorage
-  if (t) store.setItem(TOKEN_KEY, JSON.stringify(t))
-  else store.removeItem(TOKEN_KEY)
-}
+export const useGcal = create<GcalState>(() => ({ status: auth.load() ? 'connected' : 'disconnected' }))
 
 /* ------------------------------------------------------------------ */
 /* Auth                                                                */
 /* ------------------------------------------------------------------ */
 
-let gisLoading: Promise<void> | null = null
-function loadGis(): Promise<void> {
-  if ((window as any).google?.accounts?.oauth2) return Promise.resolve()
-  gisLoading ??= new Promise((resolve, reject) => {
-    const s = document.createElement('script')
-    s.src = 'https://accounts.google.com/gsi/client'
-    s.async = true
-    s.onload = () => resolve()
-    s.onerror = () => {
-      gisLoading = null
-      reject(new Error('Could not load Google sign-in (offline?)'))
-    }
-    document.head.appendChild(s)
-  })
-  return gisLoading
-}
-
 /** Must be called from a user gesture (it opens Google's consent window). */
 export async function connectGoogle(): Promise<void> {
-  const { gcalClientId, gcalClientSecret } = useSettings.getState()
-  if (!gcalClientId) throw new Error('Add your Google OAuth client ID first.')
   useGcal.setState({ status: 'connecting', error: undefined })
   try {
-    let token: Token
-    if (isTauri()) {
-      const { invoke } = await import('@tauri-apps/api/core')
-      const r = await invoke<{ access_token: string; expires_in: number; refresh_token?: string }>('google_oauth_start', {
-        clientId: gcalClientId,
-        clientSecret: gcalClientSecret,
-        scope: GCAL_SCOPE,
-      })
-      token = { access_token: r.access_token, expires_at: Date.now() + r.expires_in * 1000, refresh_token: r.refresh_token }
-    } else {
-      await loadGis()
-      token = await new Promise<Token>((resolve, reject) => {
-        const client = (window as any).google.accounts.oauth2.initTokenClient({
-          client_id: gcalClientId,
-          scope: GCAL_SCOPE,
-          callback: (r: any) =>
-            r.error ? reject(new Error(r.error_description ?? r.error)) : resolve({ access_token: r.access_token, expires_at: Date.now() + Number(r.expires_in) * 1000 }),
-          error_callback: (e: any) => reject(new Error(e?.message ?? e?.type ?? 'Sign-in was cancelled')),
-        })
-        client.requestAccessToken({ prompt: '' })
-      })
-    }
-    saveToken(token)
+    await auth.connect()
     useGcal.setState({ status: 'connected' })
   } catch (e) {
     useGcal.setState({ status: 'error', error: String((e as Error).message ?? e) })
@@ -112,36 +48,13 @@ export async function connectGoogle(): Promise<void> {
 }
 
 export function disconnectGoogle() {
-  const t = loadToken()
-  if (t && !isTauri()) (window as any).google?.accounts?.oauth2?.revoke?.(t.access_token)
-  saveToken(null)
+  auth.disconnect()
   useGcal.setState({ status: 'disconnected', error: undefined, lastResult: undefined })
 }
 
-async function accessToken(): Promise<string> {
-  const t = loadToken()
-  if (!t) throw new AuthError()
-  if (t.expires_at > Date.now() + 60_000) return t.access_token
-  if (t.refresh_token && isTauri()) {
-    const { gcalClientId, gcalClientSecret } = useSettings.getState()
-    const { invoke } = await import('@tauri-apps/api/core')
-    const r = await invoke<{ access_token: string; expires_in: number }>('google_oauth_refresh', {
-      clientId: gcalClientId,
-      clientSecret: gcalClientSecret,
-      refreshToken: t.refresh_token,
-    })
-    const next = { ...t, access_token: r.access_token, expires_at: Date.now() + r.expires_in * 1000 }
-    saveToken(next)
-    return next.access_token
-  }
-  throw new AuthError()
-}
-
-class AuthError extends Error {
-  constructor() {
-    super('Google sign-in expired — reconnect to keep syncing.')
-  }
-}
+const accessToken = () => auth.accessToken()
+const saveToken = (t: null) => auth.save(t)
+class AuthError extends GoogleAuthError {}
 
 /** Injected in tests. */
 export const http = { fetch: (input: RequestInfo, init?: RequestInit) => fetch(input, init) }
@@ -276,7 +189,7 @@ export function syncGoogle(): Promise<void> {
 }
 
 async function doSync() {
-  if (!loadToken()) {
+  if (!auth.load()) {
     useGcal.setState({ status: useGcal.getState().status === 'disconnected' ? 'disconnected' : 'expired' })
     return
   }

@@ -206,16 +206,26 @@ Desktop adds:
 - native notifications
 - Pandoc typesetting, if `pandoc` is on `PATH`
 
-### Google Calendar setup (once)
+### Google setup (once, for Calendar and Drive)
 
-1. In console.cloud.google.com, create a project and enable the **Google Calendar API**.
-2. On the OAuth consent screen, choose External and add yourself as a test user.
+1. In console.cloud.google.com, create a project and enable the **Google Calendar API** and the **Google Drive API**.
+2. On the OAuth consent screen, choose External, add yourself as a test user, and add the scopes `calendar.app.created` and `drive.file`. Both are narrow: THREAD only sees calendars and files it created.
 3. Create an OAuth client:
-   - **Browser / PWA**: type *Web application*, with the origin you serve THREAD from (for example `https://thread.example.com`) as an authorized JavaScript origin.
-   - **Desktop app**: type *Desktop app*. Sign-in opens in your system browser and returns through a loopback redirect, using PKCE.
-4. In THREAD, open **Make it yours → Google Calendar**, paste the client ID (plus the client secret for Desktop) and press **Connect**.
+   - **Browser / PWA**: type *Web application*, with the origin you serve THREAD from as an authorized JavaScript origin (for GitHub Pages: `https://kspress.github.io`).
+   - **Desktop and Android apps**: type *Desktop app*. Sign-in opens in your system browser and returns through a loopback redirect, using PKCE.
+4. In THREAD, open **Make it yours → Google Calendar**, paste the client ID (plus the client secret for the apps). **Connect** links your calendar; **Google Drive → Keep this vault in Google Drive** links your vault.
 
 If you'd rather not create an OAuth client, run a Loom and subscribe from Google Calendar to `https://<loom>/calendar.ics?token=…` (*Other calendars → From URL*). Set `LOOM_APP_URL` so events link back to THREAD.
+
+### Google Drive (a Satellite without a server)
+
+A vault can live in a folder in your Google Drive instead of (or as well as) on a Loom:
+
+- **Make it yours → Google Drive → Keep this vault in Google Drive** puts it in *My Drive › THREAD › <vault name>*: Projects and sub-threads become folders, Threads stay `.md` files, Cords `.cord`, PDFs and images stay themselves, and THREAD's own data sits in `.thread/`. Because they're plain files, the folder is readable from Drive and from Obsidian through Drive for desktop.
+- On another device, choose **Open from Google Drive** on the welcome screen and pick the vault. THREAD keeps a local copy, so it works offline and syncs when it's back online.
+- Sync runs a few seconds after you stop typing, when Drive reports a change (checked every minute), when THREAD goes to the background, and every ten minutes. The cloud dot in the Spool shows the state; click it to sync now.
+- Edits on one side are copied across, and deletions too (unless the other side changed the file). If the same file changed on two devices between syncs, nothing is lost: the Drive version keeps the name and this device's version is saved beside it as `Name (conflict Android 3f2a 2026-10-29 1405).md`.
+- Live, character-by-character merging of the same Thread open on two devices at once still needs a Loom. Drive sync works file by file.
 
 ### The Loom (Host)
 
@@ -247,7 +257,7 @@ tests/          vitest suites
 
 ## Testing
 
-`npm test` runs 45 tests. They cover:
+`npm test` runs 50 tests. They cover:
 
 - the editor's Markdown round trip
 - parsing and tables

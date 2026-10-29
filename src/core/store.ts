@@ -856,6 +856,11 @@ async function rekeyOrder(from: string, to: string) {
   await s.writeMeta('order.json', order)
 }
 
+/** Tell open editors these files changed outside them (they reload). */
+export function bumpPaths(paths: string[]) {
+  for (const p of paths) bump(p)
+}
+
 function bump(path: string) {
   useStore.setState((s) => ({ revisions: { ...s.revisions, [path]: (s.revisions[path] ?? 0) + 1 } }))
 }

@@ -9,6 +9,7 @@ import { connectGoogle, disconnectGoogle, syncGoogle, useGcal } from '../core/gc
 import { notificationPermission, requestNotifications, showNotification } from '../core/notify'
 import { isTauri } from '../core/vault'
 import { applyUpdate, BUILD, buildLabel, checkForUpdate, runningLive, useUpdate } from '../core/update'
+import { connectDrive, disconnectDrive, syncNow, useDrive } from '../core/gdrive'
 
 const BACKDROPS: { kind: Exclude<BackdropKind, 'image'>; label: string }[] = [
   { kind: 'halftone', label: 'Halftone' },
@@ -247,6 +248,8 @@ export function SettingsPanel() {
           <UpdateSettings />
 
           <CalendarSettings />
+
+          <DriveSettings />
 
           <h3>The Loom (Host)</h3>
           <p className="muted" style={{ marginTop: -4, fontSize: 13 }}>
@@ -509,6 +512,87 @@ function UpdateSettings() {
           <span style={{ fontSize: 13 }}>Load the newest version at launch</span>
         </div>
       )}
+    </>
+  )
+}
+
+function DriveSettings() {
+  const d = useDrive()
+  const st = useSettings()
+  const [busy, setBusy] = useState(false)
+  const run = async (fn: () => Promise<unknown>) => {
+    setBusy(true)
+    try {
+      await fn()
+    } catch (e) {
+      alert(String((e as Error).message ?? e))
+    } finally {
+      setBusy(false)
+    }
+  }
+  const ago = d.lastSync ? new Date(d.lastSync).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : ''
+  const r = d.report
+  return (
+    <>
+      <h3>Google Drive</h3>
+      <p className="muted" style={{ marginTop: -4, fontSize: 13 }}>
+        Keep this vault in a folder in your Google Drive — Projects and sub-threads as folders, Threads as .md files — and open it on any device. It works
+        without a Loom. THREAD only sees the files it puts there, never the rest of your Drive. Uses the Google client ID above (turn on the Google Drive API
+        in the same Google Cloud project).
+      </p>
+      {d.folder ? (
+        <>
+          <div className="drive-status">
+            <span className={'drive-dot is-' + d.status} />
+            <span>
+              <b>My Drive › THREAD › {d.folder}</b>
+              <br />
+              <small className="muted">
+                {d.status === 'syncing'
+                  ? 'Syncing…'
+                  : d.status === 'expired'
+                    ? 'Signed out — reconnect to keep syncing.'
+                    : d.status === 'offline'
+                      ? 'Offline — changes sync when you are back online.'
+                      : d.status === 'error'
+                        ? `Last sync failed: ${d.error}`
+                        : ago
+                          ? `In step · last synced ${ago}${r && (r.uploaded.length || r.downloaded.length) ? ` · ↑${r.uploaded.length} ↓${r.downloaded.length}` : ''}`
+                          : 'Ready'}
+              </small>
+            </span>
+          </div>
+          {d.conflicts.length > 0 && (
+            <p className="muted" style={{ fontSize: 12.5 }}>
+              Kept both versions of {d.conflicts.length} file{d.conflicts.length === 1 ? '' : 's'} edited in two places — look for “(conflict …)” in the Spool.
+            </p>
+          )}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+            {d.status === 'expired' ? (
+              <button className="btn btn--ink" disabled={busy} onClick={() => void run(connectDrive)}>
+                <Icon name="cloud" size={14} /> Reconnect
+              </button>
+            ) : (
+              <button className="btn btn--ink" disabled={busy || d.status === 'syncing'} onClick={() => void run(syncNow)}>
+                <Icon name="sync" size={14} /> Sync now
+              </button>
+            )}
+            {d.rootId && (
+              <a className="btn" href={`https://drive.google.com/drive/folders/${d.rootId}`} target="_blank" rel="noreferrer">
+                Open in Drive ↗
+              </a>
+            )}
+            <button className="btn" disabled={busy} onClick={() => void run(disconnectDrive)} title="Stop syncing; nothing is deleted">
+              Stop syncing
+            </button>
+          </div>
+        </>
+      ) : (
+        <button className="btn btn--ink" disabled={busy || !st.gcalClientId} onClick={() => void run(connectDrive)}>
+          <Icon name="cloud" size={14} /> {busy ? 'Connecting…' : 'Keep this vault in Google Drive'}
+        </button>
+      )}
+      {!st.gcalClientId && <p className="muted" style={{ fontSize: 12 }}>Add your Google OAuth client ID in Google Calendar above first.</p>}
     </>
   )
 }

@@ -21,6 +21,10 @@ const step = async (name, fn) => {
 }
 if (scenario === 'newvault') {
   await step('tap Start a new vault', () => page.getByText('Start a new vault').click({ timeout: 10000 }))
+  await step('name it and create', async () => {
+    await page.locator('input[aria-label="Vault name"]').fill('Phone Vault')
+    await page.getByRole('button', { name: 'Create' }).click()
+  })
   await page.waitForTimeout(6000)
   await step('vault opened', () => page.waitForSelector('.app', { timeout: 20000 }))
   await step('create a Thread', async () => {

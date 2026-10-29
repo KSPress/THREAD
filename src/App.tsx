@@ -43,6 +43,7 @@ export function App() {
     if (!adapter) return
     startReminders()
     startGoogleAutoSync()
+    void import('./core/gdrive').then((m) => m.startDriveAutoSync())
     const openFromHash = () => {
       const m = /^#open=(.+)$/.exec(location.hash)
       if (!m) return
