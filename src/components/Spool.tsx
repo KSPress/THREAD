@@ -49,19 +49,46 @@ export function Spool() {
 
   useEffect(() => localStorage.setItem(OPEN_KEY, JSON.stringify(openMap)), [openMap])
 
-  const tree = useMemo(() => buildTree(files, threads), [files, threads])
+  const order = useStore((s) => s.order)
+  const tree = useMemo(() => buildTree(files, threads, order), [files, threads, order])
   const dyes = useMemo(() => {
     const counts = new Map<string, number>()
     for (const t of Object.values(threads)) for (const d of t.dyes) counts.set(d, (counts.get(d) ?? 0) + 1)
     return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
   }, [threads])
 
-  const toggle = (p: string) => setOpenMap((m) => ({ ...m, [p]: !m[p] }))
+  const toggle = (p: string, value?: boolean) => setOpenMap((m) => ({ ...m, [p]: value ?? !m[p] }))
+  const renameSoon = (p: string) => setTimeout(() => setRenaming(p), 60)
+
+  // Drag onto the top/bottom edge of a row to place beside it, onto its middle to nest inside it.
+  const onPlace = async (moving: string, target: TreeNode, pos: DropPos, siblings: TreeNode[]) => {
+    const s = useStore.getState()
+    if (pos === 'inside') {
+      await s.movePath(moving, childDir(target)!)
+      toggle(target.path, true)
+      return
+    }
+    const dir = dirname(target.path)
+    const to = await s.movePath(moving, dir)
+    const names = siblings.map((n) => basename(n.path)).filter((n) => n !== basename(moving) && n !== basename(to))
+    const i = names.indexOf(basename(target.path))
+    names.splice(pos === 'before' ? i : i + 1, 0, basename(to))
+    await s.setOrder(dir, names)
+  }
+  // "+" on a row: a new page inside it, named right there in the Spool.
+  const onAdd = async (node: TreeNode) => {
+    const s = useStore.getState()
+    const p = node.file.kind === 'folder' ? await s.createThread(node.path, 'Untitled') : await s.createSubThread(node.path, 'Untitled', { stitch: true })
+    toggle(node.path, true)
+    s.open(p)
+    renameSoon(p)
+  }
 
   const newThread = async (dir = '') => {
     const p = await createThread(dir, 'Untitled')
     if (dir) setOpenMap((m) => ({ ...m, [dir]: true }))
     open(p)
+    renameSoon(p)
   }
   const newCord = async (dir = '') => {
     const name = prompt('Name the Cord — a Thread with pages, headers, page numbers and footnotes', 'Untitled Cord')
@@ -92,6 +119,17 @@ export function Spool() {
       const paths = await importFiles(dir, [...e.dataTransfer.files])
       useStore.getState().notify(`Spooled ${paths.length} file${paths.length === 1 ? '' : 's'} into ${dir || 'the vault'}`)
     }
+  }
+
+  const treeProps: TreeProps = {
+    openMap,
+    toggle,
+    onCtx: setCtx,
+    renaming,
+    setRenaming,
+    onDrop: (e, dir) => void onDrop(e, dir),
+    onPlace: (m, t, p, sib) => void onPlace(m, t, p, sib),
+    onAdd: (n) => void onAdd(n),
   }
 
   return (
@@ -155,26 +193,20 @@ export function Spool() {
                 <Row
                   key={t.path}
                   node={{ path: t.path, name: t.name, file: files[t.path], children: [] }}
+                  siblings={[]}
                   depth={0}
                   open={false}
                   onToggle={() => {}}
-                  onCtx={setCtx}
-                  renaming={renaming}
-                  setRenaming={setRenaming}
-                  onDrop={onDrop}
+                  {...treeProps}
                 />
               ))
           ) : (
-            <TreeList
-              nodes={tree}
-              depth={0}
-              openMap={openMap}
-              toggle={toggle}
-              onCtx={setCtx}
-              renaming={renaming}
-              setRenaming={setRenaming}
-              onDrop={onDrop}
-            />
+            <div role="tree" aria-label="Spool">
+              <TreeList nodes={tree} depth={0} {...treeProps} />
+              <button className="tree-addpage" onClick={() => void newThread('')}>
+                <Icon name="plus" size={14} /> Add a page
+              </button>
+            </div>
           )}
 
           <div className="spool__section">
@@ -237,35 +269,44 @@ export function Spool() {
   )
 }
 
-function TreeList(props: {
-  nodes: TreeNode[]
-  depth: number
+type DropPos = 'before' | 'inside' | 'after'
+
+interface TreeProps {
   openMap: Record<string, boolean>
-  toggle: (p: string) => void
+  toggle: (p: string, open?: boolean) => void
   onCtx: (c: { x: number; y: number; node: TreeNode | null }) => void
   renaming: string | null
   setRenaming: (p: string | null) => void
   onDrop: (e: DragEvent, dir: string) => void
-}) {
+  onPlace: (moving: string, target: TreeNode, pos: DropPos, siblings: TreeNode[]) => void
+  onAdd: (node: TreeNode) => void
+}
+
+/** The folder a node's children live in: a Project's own folder, or a Thread's sub-thread folder. */
+export function childDir(node: { path: string; file: FileInfo }) {
+  if (node.file.kind === 'folder') return node.path
+  if (node.file.kind === 'thread') return subThreadDir(node.path)
+  return null
+}
+
+function TreeList(props: TreeProps & { nodes: TreeNode[]; depth: number }) {
   return (
     <>
       {props.nodes.map((n) => {
         const isOpen = !!props.openMap[n.path]
+        const nestable = childDir(n) !== null
         return (
           <div key={n.path}>
-            <Row
-              node={n}
-              depth={props.depth}
-              open={isOpen}
-              onToggle={() => props.toggle(n.path)}
-              onCtx={props.onCtx}
-              renaming={props.renaming}
-              setRenaming={props.setRenaming}
-              onDrop={props.onDrop}
-            />
-            {isOpen && n.children.length > 0 && (
-              <div className="tree-children">
-                <TreeList {...props} nodes={n.children} depth={props.depth + 1} />
+            <Row {...props} node={n} siblings={props.nodes} depth={props.depth} open={isOpen} onToggle={() => props.toggle(n.path)} />
+            {isOpen && nestable && (
+              <div className="tree-children" style={{ ['--depth' as any]: props.depth + 1 }}>
+                {n.children.length > 0 ? (
+                  <TreeList {...props} nodes={n.children} depth={props.depth + 1} />
+                ) : (
+                  <div className="tree-empty" style={{ ['--depth' as any]: props.depth + 1 }}>
+                    No pages inside
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -277,6 +318,7 @@ function TreeList(props: {
 
 function Row({
   node,
+  siblings,
   depth,
   open,
   onToggle,
@@ -284,29 +326,23 @@ function Row({
   renaming,
   setRenaming,
   onDrop,
-}: {
-  node: TreeNode
-  depth: number
-  open: boolean
-  onToggle: () => void
-  onCtx: (c: { x: number; y: number; node: TreeNode | null }) => void
-  renaming: string | null
-  setRenaming: (p: string | null) => void
-  onDrop: (e: DragEvent, dir: string) => void
-}) {
+  onPlace,
+  onAdd,
+}: TreeProps & { node: TreeNode; siblings: TreeNode[]; depth: number; open: boolean; onToggle: () => void }) {
   const active = useStore((s) => s.active)
-  const deskPdf = useStore((s) => s.desk.pdf)
-  const view = useStore((s) => s.view)
+  const panes = useStore((s) => s.panes)
   const threads = useStore((s) => s.threads)
   const dyeColor = useDyeColor()
   const open_ = useStore((s) => s.open)
+  const openPane = useStore((s) => s.openPane)
   const renamePath = useStore((s) => s.renamePath)
   const isFolder = node.file.kind === 'folder'
   const note = isFolder ? folderNote(node.path, threads) : null
-  const isActive = isFolder ? !!note && note === active : node.path === active || (view === 'desk' && node.path === deskPdf)
+  const isActive = isFolder ? !!note && note === active : node.path === active
+  const inPane = !isActive && panes.some((p) => p.path === node.path || (!!note && p.path === note))
   const thread = threads[node.path]
   const inputRef = useRef<HTMLInputElement>(null)
-  const [over, setOver] = useState(false)
+  const [drop, setDrop] = useState<DropPos | null>(null)
 
   useEffect(() => {
     if (renaming === node.path) inputRef.current?.select()
@@ -322,46 +358,85 @@ function Row({
 
   const icon = isFolder ? 'folder' : node.file.kind === 'pdf' || node.file.kind === 'epub' ? 'pdf' : node.file.kind === 'image' ? 'image' : 'file'
   const isThread = node.file.kind === 'thread'
-  const expandable = isFolder || node.children.length > 0
+  const nestable = childDir(node) !== null
+  const where = (e: DragEvent): DropPos => {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const y = (e.clientY - r.top) / r.height
+    if (!nestable) return y < 0.5 ? 'before' : 'after'
+    return y < 0.28 ? 'before' : y > 0.72 ? 'after' : 'inside'
+  }
+  const openIt = () => {
+    if (isFolder) {
+      if (note) open_(note)
+      if (!open || !note) onToggle()
+    } else if (isThread) open_(node.path)
+    else openPane(node.path)
+  }
 
   return (
     <div
-      className={'tree-row' + (isActive ? ' is-active' : '') + (isFolder ? ' is-project' : '') + (open ? ' is-open' : '')}
-      style={{ ['--depth' as any]: depth, ...(over ? { outline: '2px dashed var(--accent)' } : {}) }}
-      role="button"
+      className={
+        'tree-row' +
+        (isActive ? ' is-active' : '') +
+        (inPane ? ' is-in-pane' : '') +
+        (isFolder ? ' is-project' : '') +
+        (open ? ' is-open' : '') +
+        (drop ? ` drop-${drop}` : '')
+      }
+      style={{ ['--depth' as any]: depth }}
+      role="treeitem"
+      aria-expanded={nestable ? open : undefined}
       tabIndex={0}
       draggable={renaming !== node.path}
-      onDragStart={(e) => e.dataTransfer.setData('text/thread-path', node.path)}
+      onDragStart={(e) => {
+        e.dataTransfer.setData('text/thread-path', node.path)
+        e.dataTransfer.effectAllowed = 'copyMove'
+      }}
       onDragOver={(e) => {
-        // Drop onto a folder to move into it, onto a Thread to nest as a sub-thread.
-        if (!isFolder && !isThread) return
+        const moving = [...e.dataTransfer.types].includes('text/thread-path')
+        if (!moving && !(nestable && e.dataTransfer.types.includes('Files'))) return
         e.preventDefault()
         e.stopPropagation()
-        setOver(true)
+        const pos = moving ? where(e) : 'inside'
+        if (pos !== drop) setDrop(pos)
       }}
-      onDragLeave={() => setOver(false)}
+      onDragLeave={() => setDrop(null)}
       onDrop={(e) => {
-        setOver(false)
-        if (isFolder) onDrop(e, node.path)
-        else if (isThread && e.dataTransfer.getData('text/thread-path') !== node.path) onDrop(e, subThreadDir(node.path))
+        const pos = drop ?? 'inside'
+        setDrop(null)
+        const moving = e.dataTransfer.getData('text/thread-path')
+        if (!moving) {
+          const dir = childDir(node)
+          if (dir !== null) onDrop(e, dir)
+          return
+        }
+        e.preventDefault()
+        e.stopPropagation()
+        if (moving === node.path || node.path.startsWith(moving + '/') || (isThread && node.path.startsWith(subThreadDir(moving) + '/'))) return
+        onPlace(moving, node, pos, siblings)
       }}
-      onClick={() => {
-        if (renaming === node.path) return
-        if (isFolder) {
-          if (note) open_(note)
-          if (!open || !note) onToggle()
-        } else open_(node.path)
+      onClick={() => renaming !== node.path && openIt()}
+      onDoubleClick={(e) => {
+        e.stopPropagation()
+        setRenaming(node.path)
       }}
-      onKeyDown={(e) => e.key === 'F2' && setRenaming(node.path)}
+      onKeyDown={(e) => {
+        if (e.key === 'F2') setRenaming(node.path)
+        else if (e.key === 'Enter' && renaming !== node.path) openIt()
+        else if (e.key === 'ArrowRight' && nestable && !open) onToggle()
+        else if (e.key === 'ArrowLeft' && open) onToggle()
+      }}
       onContextMenu={(e: MouseEvent) => {
         e.preventDefault()
         e.stopPropagation()
         onCtx({ x: e.clientX, y: e.clientY, node })
       }}
     >
-      {expandable ? (
+      {nestable ? (
         <span
           className="chev"
+          role="button"
+          aria-label={open ? 'Collapse' : 'Expand'}
           onClick={(e) => {
             e.stopPropagation()
             onToggle()
@@ -370,7 +445,7 @@ function Row({
           <Icon name="chevron" size={13} />
         </span>
       ) : (
-        <span style={{ width: 13 }} />
+        <span className="chev chev--none" />
       )}
       {isThread ? <ThreadIcon thread={thread} size={15} /> : <Icon name={icon} size={15} />}
       {renaming === node.path ? (
@@ -380,6 +455,7 @@ function Row({
           onClick={(e) => e.stopPropagation()}
           onBlur={(e) => void commitRename(e.target.value)}
           onKeyDown={(e) => {
+            e.stopPropagation()
             if (e.key === 'Enter') void commitRename((e.target as HTMLInputElement).value)
             if (e.key === 'Escape') setRenaming(null)
           }}
@@ -388,18 +464,35 @@ function Row({
         <span className="name">{node.name}</span>
       )}
       {thread?.dyes[0] && <span className="tree-row__dye" style={{ background: dyeColor(thread.dyes[0]) }} />}
-      {expandable && <span className="count">{countThreads(node)}</span>}
-      <span
-        className="tree-row__more"
-        role="button"
-        aria-label={`More actions for ${node.name}`}
-        onClick={(e) => {
-          e.stopPropagation()
-          const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
-          onCtx({ x: r.left, y: r.bottom + 4, node })
-        }}
-      >
-        <Icon name="more" size={16} />
+      {isFolder && <span className="count">{countThreads(node)}</span>}
+      <span className="tree-row__actions">
+        <span
+          className="tree-row__more"
+          role="button"
+          title="Delete, rename, dye and more…"
+          aria-label={`More actions for ${node.name}`}
+          onClick={(e) => {
+            e.stopPropagation()
+            const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+            onCtx({ x: r.left, y: r.bottom + 4, node })
+          }}
+        >
+          <Icon name="more" size={16} />
+        </span>
+        {nestable && (
+          <span
+            className="tree-row__add"
+            role="button"
+            title="Add a page inside"
+            aria-label={`Add a page inside ${node.name}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              onAdd(node)
+            }}
+          >
+            <Icon name="plus" size={14} />
+          </span>
+        )}
       </span>
     </div>
   )
@@ -459,11 +552,14 @@ function ContextMenu({
           <hr />
           {(node.file.kind === 'pdf' || node.file.kind === 'epub') && (
             <button onClick={() => openDesk(node.path)}>
-              <Icon name="desk" size={15} /> Open at the Desk
+              <Icon name="desk" size={15} /> Open beside the Thread
             </button>
           )}
           {node.file.kind === 'thread' && (
             <>
+              <button onClick={() => useStore.getState().openPane(node.path)}>
+                <Icon name="desk" size={15} /> Open beside
+              </button>
               <button onClick={() => onSubThread(node.path)}>
                 <Icon name="plus" size={15} /> New sub-thread
               </button>
@@ -504,16 +600,20 @@ function ContextMenu({
   )
 }
 
-function buildTree(files: Record<string, FileInfo>, threads: Record<string, unknown>): TreeNode[] {
+function buildTree(files: Record<string, FileInfo>, threads: Record<string, unknown>, order: Record<string, string[]>): TreeNode[] {
   const nodes = new Map<string, TreeNode>()
   const root: TreeNode[] = []
   const paths = Object.keys(files).sort()
   for (const p of paths) {
     const f = files[p]
-    nodes.set(p, { path: p, name: f.kind === 'thread' ? basename(p).replace(/\.md$/i, '') : basename(p), file: f, children: [] })
+    nodes.set(p, { path: p, name: f.kind === 'thread' ? basename(p).replace(/\.(md|cord)$/i, '') : basename(p), file: f, children: [] })
   }
   // A folder next to a Thread of the same name holds that Thread's sub-threads.
-  const owner = (dir: string) => (files[dir]?.kind === 'folder' && threads[`${dir}.md`] ? nodes.get(`${dir}.md`) : undefined)
+  const owner = (dir: string) => {
+    if (files[dir]?.kind !== 'folder') return undefined
+    const t = threads[`${dir}.md`] ? `${dir}.md` : threads[`${dir}.cord`] ? `${dir}.cord` : null
+    return t ? nodes.get(t) : undefined
+  }
   for (const p of paths) {
     const node = nodes.get(p)!
     const parent = dirname(p)
@@ -524,15 +624,23 @@ function buildTree(files: Record<string, FileInfo>, threads: Record<string, unkn
     if (target) target.children.push(node)
     else root.push(node)
   }
-  const sort = (list: TreeNode[]) => {
+  // Manual order (dragged in the Spool) first; anything not ordered yet follows, Projects first, then by name.
+  const sort = (list: TreeNode[], dir: string | null) => {
+    const manual = dir !== null ? order[dir] : undefined
+    const rank = (n: TreeNode) => {
+      const i = manual ? manual.indexOf(basename(n.path)) : -1
+      return i < 0 ? Infinity : i
+    }
     list.sort((a, b) => {
+      const r = rank(a) - rank(b)
+      if (r) return r
       const af = a.file.kind === 'folder' ? 0 : 1
       const bf = b.file.kind === 'folder' ? 0 : 1
       return af - bf || a.name.localeCompare(b.name, undefined, { numeric: true })
     })
-    list.forEach((n) => sort(n.children))
+    list.forEach((n) => sort(n.children, childDir(n)))
   }
-  sort(root)
+  sort(root, '')
   return root
 }
 

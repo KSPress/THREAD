@@ -8,7 +8,6 @@ const ITEMS: { view: View; icon: string; label: string }[] = [
   { view: 'home', icon: 'home', label: 'The Loom' },
   { view: 'canvas', icon: 'canvas', label: 'Canvas' },
   { view: 'tapestry', icon: 'tapestry', label: 'Tapestry' },
-  { view: 'desk', icon: 'desk', label: 'The Desk' },
   { view: 'compiler', icon: 'compiler', label: 'Compiler' },
 ]
 

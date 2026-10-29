@@ -4,11 +4,11 @@
 // footers and page numbers are drawn on the sheets.
 import { EditorContent, useEditor, type Editor } from '@tiptap/react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { editorBus, useStore } from '../core/store'
+import { editorBus, editors, useStore } from '../core/store'
+import { dropQuote, quoteContent } from '../editor/quoteDrop'
 import { useSettings } from '../core/settings'
 import { saveFile } from '../core/platform'
 import { kindOf, stem } from '../core/paths'
-import { parseStitch } from '../core/markdown'
 import { StitchPicker } from '../editor/commands'
 import { cordExtensions, pagesKey, spacerDecorations } from './extensions'
 import { computeLayout, layoutSignature, PAGE_GAP, pageBox, type Layout } from './layout'
@@ -96,7 +96,8 @@ export default function CordView({ path }: { path: string }) {
           void insertFiles(files)
           return true
         },
-        handleDrop: (_view, event) => {
+        handleDrop: (view, event) => {
+          if (dropQuote(editorRef.current, view, event as DragEvent, path)) return true
           const files = [...((event as DragEvent).dataTransfer?.files ?? [])]
           if (!files.length) return false
           event.preventDefault()
@@ -185,32 +186,22 @@ export default function CordView({ path }: { path: string }) {
     }
   }, [path])
 
-  // The Desk and the sub-thread button stitch into whichever editor is live.
+  // PDF panes can quote into this Cord; the focused one also serves the sub-thread button.
+  const isActive = useStore((s) => s.active === path)
   useEffect(() => {
     if (!editor) return
-    editorBus.insertStitch = (target) => editor.chain().focus().insertStitch({ target }).run()
-    editorBus.insertQuote = (quote, stitch) => {
-      const s = parseStitch(stitch.replace(/^\[\[|\]\]$/g, ''))
-      editor
-        .chain()
-        .focus('end')
-        .insertContent([
-          {
-            type: 'blockquote',
-            content: [
-              { type: 'paragraph', content: [{ type: 'text', text: quote }] },
-              { type: 'paragraph', content: [{ type: 'stitch', attrs: { target: s.target, anchor: s.anchor ?? null, alias: s.alias ?? null } }] },
-            ],
-          },
-          { type: 'paragraph' },
-        ])
-        .run()
-    }
+    const insertQuote = (quote: string, stitch: string) => editor.chain().focus('end').insertContent(quoteContent(quote, stitch)).run()
+    editors.set(path, { insertQuote })
+    if (!isActive) return () => void (editors.get(path)?.insertQuote === insertQuote && editors.delete(path))
+    const insertStitch = (target: string) => editor.chain().focus().insertStitch({ target }).run()
+    editorBus.insertStitch = insertStitch
+    editorBus.insertQuote = insertQuote
     return () => {
-      editorBus.insertStitch = null
-      editorBus.insertQuote = null
+      if (editors.get(path)?.insertQuote === insertQuote) editors.delete(path)
+      if (editorBus.insertStitch === insertStitch) editorBus.insertStitch = null
+      if (editorBus.insertQuote === insertQuote) editorBus.insertQuote = null
     }
-  }, [editor])
+  }, [editor, isActive])
 
   // Fit the page to narrow screens (phones) on open.
   useLayoutEffect(() => {

@@ -2,8 +2,10 @@
 import { create } from 'zustand'
 import {
   normalizeDye,
+  deepAnchor,
   dyesOf,
   extractStitches,
+  formatStitch,
   firstHeading,
   joinFrontmatter,
   splitFrontmatter,
@@ -11,14 +13,15 @@ import {
   type Frontmatter,
   type Stitch,
 } from './markdown'
-import { basename, dirname, isHidden, join, kindOf, META_DIR, safeName, stem, type FileKind } from './paths'
+import { basename, dirname, extname, isHidden, join, kindOf, META_DIR, safeName, stem, type FileKind } from './paths'
 import { LoomSync, type LoomStatus } from './sync'
+import { uid } from './table'
 import { PALETTES, useSettings } from './settings'
 import { deviceId, loadActivity, recordActivity, renameActivity } from './activity'
 import { cordToMarkdown, isCordPath, newCord, parseCord, renameStitchTargets, serializeCord } from '../cord/model'
 import type { VaultAdapter, VaultEntry } from './vault'
 
-export type View = 'home' | 'canvas' | 'tapestry' | 'desk' | 'compiler'
+export type View = 'home' | 'canvas' | 'tapestry' | 'compiler'
 
 export interface ThreadInfo {
   path: string
@@ -76,13 +79,19 @@ export interface Manuscript {
   keepDeepQuotes: boolean
 }
 
-interface DeskState {
-  pdf: string | null
-  page: number
+/** One document open side by side on the Canvas: a Thread, a Cord or a PDF. */
+export interface Pane {
+  id: string
+  path: string
+  /** PDFs: where to scroll, and the highlight to flash. */
+  page?: number
   highlight?: string
   /** Bumped to force a scroll even when the same target is requested twice. */
   nonce: number
 }
+
+/** At most this many documents side by side. */
+export const MAX_PANES = 4
 
 interface State {
   adapter: VaultAdapter | null
@@ -92,9 +101,16 @@ interface State {
   dyeColors: Record<string, string>
   active: string | null
   view: View
-  desk: DeskState
+  /** Documents open on the Canvas, left to right. `active` is the focused Thread among them. */
+  panes: Pane[]
+  /** Ask the Canvas to show its "open beside" picker (e.g. from the / menu). */
+  pickerOpen: boolean
+  /** Bumped per PDF whenever its highlights change, so open readers reload them. */
+  highlightRev: Record<string, number>
   /** Per-path counter bumped when a Thread changes outside the editor. */
   revisions: Record<string, number>
+  /** Manual Spool order: folder path ('' = vault root) → entry names in order (.thread/order.json). */
+  order: Record<string, string[]>
   dyeFilter: string | null
   recent: string[]
   spoolOpen: boolean
@@ -127,6 +143,9 @@ interface Actions {
   deleteDye(dye: string): Promise<void>
   toggleDye(path: string, dye: string): Promise<void>
   renamePath(from: string, to: string): Promise<void>
+  /** Move a file or folder into `dir` (created if needed), keeping its name unique there. Returns the new path. */
+  movePath(from: string, dir: string): Promise<string>
+  setOrder(dir: string, names: string[]): Promise<void>
   deletePath(path: string): Promise<void>
   importFiles(dir: string, files: File[]): Promise<string[]>
   dyeColor(dye: string): string
@@ -135,6 +154,12 @@ interface Actions {
   writeMeta(name: string, value: unknown): Promise<void>
   highlights(pdf: string): Promise<Highlight[]>
   saveHighlights(pdf: string, list: Highlight[]): Promise<void>
+  /** Record a PDF passage as a highlight (reusing an identical one) and, given a Thread, quote it there with its Deep Stitch. */
+  weaveQuote(q: QuoteDrag, thread: string | null): Promise<string>
+  /** Open a document beside the others on the Canvas (or scroll the pane already showing it). */
+  openPane(path: string, opts?: { index?: number; page?: number; highlight?: string; focus?: boolean }): void
+  closePane(id: string): void
+  /** Open a PDF beside the active Thread, optionally at a page and highlight. */
   openDesk(pdf: string | null, page?: number, highlight?: string): void
   connectLoom(): Promise<void>
   notify(text: string): void
@@ -155,8 +180,11 @@ export const useStore = create<State & Actions>((set, get) => ({
   dyeColors: {},
   active: null,
   view: 'home',
-  desk: { pdf: null, page: 1, nonce: 0 },
+  panes: [],
+  pickerOpen: false,
+  highlightRev: {},
   revisions: {},
+  order: {},
   dyeFilter: null,
   recent: [],
   // Satellites on tablets/phones start with the side panels tucked away.
@@ -172,7 +200,7 @@ export const useStore = create<State & Actions>((set, get) => ({
 
   async openVault(adapter) {
     sync?.disconnect()
-    set({ adapter, loading: true, files: {}, threads: {}, active: null, view: 'home', recent: [] })
+    set({ adapter, loading: true, files: {}, threads: {}, active: null, view: 'home', recent: [], panes: [], order: {} })
     sync = new LoomSync(adapter.name, {
       onRemoteText: (path, text) => void applyRemote(path, text),
       onRemoteDelete: (path) => void applyRemoteDelete(path),
@@ -188,7 +216,8 @@ export const useStore = create<State & Actions>((set, get) => ({
     await get().refresh()
     const dyeColors = await get().readMeta<Record<string, string>>('dyes.json', {})
     const recent = (await get().readMeta<string[]>('recent.json', [])).filter((p) => get().threads[p])
-    set({ dyeColors, recent, loading: false })
+    const order = await get().readMeta<Record<string, string[]>>('order.json', {})
+    set({ dyeColors, recent, order, loading: false })
     await loadActivity()
     await get().connectLoom()
   },
@@ -230,7 +259,15 @@ export const useStore = create<State & Actions>((set, get) => ({
     }
     if (f.kind !== 'thread') return
     const recent = [path, ...get().recent.filter((p) => p !== path)].slice(0, 30)
-    set({ active: path, recent, view: get().view === 'desk' ? 'desk' : 'canvas' })
+    // Already open in a pane: focus it. Otherwise the focused Thread's pane shows it.
+    const panes = get().panes
+    let next = panes
+    if (!panes.some((p) => p.path === path)) {
+      const i = panes.findIndex((p) => p.path === get().active)
+      const at = i >= 0 ? i : panes.findIndex((p) => kindOf(p.path) === 'thread')
+      next = at >= 0 ? panes.map((p, j) => (j === at ? { id: paneId(), path, nonce: 0 } : p)) : [...panes, { id: paneId(), path, nonce: 0 }]
+    }
+    set({ active: path, recent, view: 'canvas', panes: next })
     if (isCompact()) set({ spoolOpen: false, stitchingOpen: false })
     void get().writeMeta('recent.json', recent)
   },
@@ -409,6 +446,12 @@ export const useStore = create<State & Actions>((set, get) => ({
     const adapter = get().adapter!
     if (from === to) return
     const isFolder = get().files[from]?.kind === 'folder'
+    // A page titled with its own name keeps them in step (renaming "Untitled" retitles it).
+    const t = get().threads[from]
+    if (t && t.kind === 'thread' && stem(from) !== stem(to)) {
+      const re = new RegExp(`^# ${escapeRe(stem(from))}[ \\t]*$`, 'm')
+      if (re.test(t.body)) await get().saveThread(from, t.head + t.body.replace(re, `# ${stem(to)}`))
+    }
     await adapter.rename(from, to)
     // A Thread's sub-threads travel with it.
     if (!isFolder && kindOf(from) === 'thread') {
@@ -443,9 +486,34 @@ export const useStore = create<State & Actions>((set, get) => ({
     }
     await sync?.rename(from, to)
     renameActivity(from, to)
+    await rekeyOrder(from, to)
     const active = get().active
     await get().refresh()
-    if (active && (active === from || active.startsWith(from + '/'))) set({ active: to + active.slice(from.length) })
+    const moved = (p: string) => {
+      if (p === from || p.startsWith(from + '/')) return to + p.slice(from.length)
+      const sub = kindOf(from) === 'thread' && !isFolder ? subThreadDir(from) : null
+      if (sub && p.startsWith(sub + '/')) return subThreadDir(to) + p.slice(sub.length)
+      return p
+    }
+    set((s) => ({ panes: s.panes.map((p) => ({ ...p, path: moved(p.path) })) }))
+    if (active) set({ active: moved(active) })
+  },
+
+  async movePath(from, dir) {
+    const adapter = get().adapter!
+    if (dirname(from) === dir) return from
+    if (dir && get().files[dir]?.kind !== 'folder' && !(await adapter.exists(dir))) await adapter.mkdir(dir)
+    const ext = get().files[from]?.kind === 'folder' ? '' : extname(from)
+    const base = ext ? basename(from).slice(0, -ext.length) : basename(from)
+    let to = join(dir, basename(from))
+    for (let i = 2; get().files[to] || (await adapter.exists(to)); i++) to = join(dir, `${base} ${i}${ext}`)
+    await get().renamePath(from, to)
+    return to
+  },
+
+  async setOrder(dir, names) {
+    set((s) => ({ order: { ...s.order, [dir]: names } }))
+    await get().writeMeta('order.json', get().order)
   },
 
   async deletePath(path) {
@@ -456,7 +524,12 @@ export const useStore = create<State & Actions>((set, get) => ({
     for (const p of Object.keys(get().threads)) if (p === path || p.startsWith(path + '/')) await sync?.remove(p)
     const active = get().active
     await get().refresh()
-    if (active && (active === path || active.startsWith(path + '/'))) set({ active: null, view: 'home' })
+    const gone = (p: string) => p === path || p.startsWith(path + '/') || (kindOf(path) === 'thread' && p.startsWith(subThreadDir(path) + '/'))
+    set((s) => ({ panes: s.panes.filter((p) => !gone(p.path)) }))
+    if (active && gone(active)) {
+      const next = get().panes.find((p) => kindOf(p.path) === 'thread')?.path ?? null
+      set({ active: next, ...(next ? {} : { view: 'home' as View }) })
+    }
   },
 
   async importFiles(dir, list) {
@@ -512,13 +585,66 @@ export const useStore = create<State & Actions>((set, get) => ({
 
   async saveHighlights(pdf, list) {
     await get().writeMeta(`highlights/${pdf}.json`, list)
+    set((s) => ({ highlightRev: { ...s.highlightRev, [pdf]: (s.highlightRev[pdf] ?? 0) + 1 } }))
+  },
+
+  async weaveQuote(q, thread) {
+    const list = await get().highlights(q.pdf)
+    // The same passage dragged into several Threads is one highlight with several Stitches.
+    let h = list.find((x) => x.page === q.page && x.text === q.text)
+    if (!h) {
+      h = { id: uid('h').slice(0, 9), page: q.page, rects: q.rects, text: q.text, dye: q.dye, created: Date.now(), thread: thread ?? undefined }
+      await get().saveHighlights(q.pdf, [...list, h])
+    }
+    const stitch = formatStitch({ target: basename(q.pdf), anchor: deepAnchor(q.page, h.id) })
+    if (thread) {
+      const ed = editors.get(thread)
+      const t = get().threads[thread]
+      if (ed) ed.insertQuote(q.text, stitch)
+      else if (t && t.kind === 'thread') await get().saveBody(thread, `${t.body.trimEnd()}\n\n> ${q.text}\n> ${stitch}\n`)
+    }
+    get().notify(`Cross-stitched · p.${q.page}${thread ? ` → ${get().threads[thread]?.name ?? ''}` : ''}`)
+    return stitch
+  },
+
+  openPane(path, opts = {}) {
+    const f = get().files[path]
+    if (!f || f.kind === 'folder') return
+    const isThread = f.kind === 'thread'
+    let panes = get().panes
+    const hit = panes.find((p) => p.path === path)
+    if (hit) {
+      panes = panes.map((p) => (p === hit ? { ...p, page: opts.page ?? p.page, highlight: opts.highlight, nonce: p.nonce + 1 } : p))
+    } else {
+      const pane: Pane = { id: paneId(), path, page: opts.page, highlight: opts.highlight, nonce: 0 }
+      panes = [...panes]
+      panes.splice(Math.max(0, Math.min(opts.index ?? panes.length, panes.length)), 0, pane)
+      // Too many: let go of the oldest pane that isn't the focused Thread.
+      while (panes.length > MAX_PANES) {
+        const drop = panes.findIndex((p) => p !== pane && p.path !== get().active)
+        panes.splice(drop < 0 ? 0 : drop, 1)
+      }
+    }
+    const recent = isThread ? [path, ...get().recent.filter((p) => p !== path)].slice(0, 30) : get().recent
+    set({ panes, view: 'canvas', recent, ...(isThread && opts.focus !== false ? { active: path } : {}) })
+    if (isCompact()) set({ spoolOpen: false, stitchingOpen: false })
+  },
+
+  closePane(id) {
+    const panes = get().panes.filter((p) => p.id !== id)
+    const active = get().active
+    const stillOpen = panes.some((p) => p.path === active)
+    set({ panes, ...(stillOpen ? {} : { active: panes.find((p) => kindOf(p.path) === 'thread')?.path ?? null }) })
   },
 
   openDesk(pdf, page = 1, highlight) {
-    set((s) => ({
-      view: 'desk',
-      desk: { pdf: pdf ?? s.desk.pdf, page, highlight, nonce: s.desk.nonce + 1 },
-    }))
+    if (!pdf) {
+      set({ view: 'canvas', pickerOpen: true })
+      return
+    }
+    // Beside the focused Thread, on its left (reading on the left, writing on the right).
+    const at = get().panes.findIndex((p) => p.path === get().active)
+    get().openPane(pdf, { page, highlight, index: at >= 0 ? at : 0, focus: false })
   },
 
   async connectLoom() {
@@ -649,6 +775,36 @@ export function backlinksOf(path: string, s: Pick<State, 'files' | 'threads'>) {
   return out
 }
 
+let paneSeq = 0
+const paneId = () => `pane-${Date.now().toString(36)}-${++paneSeq}`
+
+/** Keep the manual Spool order in step with a rename or move. */
+async function rekeyOrder(from: string, to: string) {
+  const s = useStore.getState()
+  const order: Record<string, string[]> = {}
+  let changed = false
+  const moveKey = (k: string) => {
+    for (const root of [from, kindOf(from) === 'thread' ? subThreadDir(from) : null]) {
+      if (!root) continue
+      const dest = root === from ? to : subThreadDir(to)
+      if (k === root || k.startsWith(root + '/')) return dest + k.slice(root.length)
+    }
+    return k
+  }
+  for (const [k, names] of Object.entries(s.order)) {
+    const nk = moveKey(k)
+    let list = names
+    if (k === dirname(from)) {
+      list = dirname(to) === k ? names.map((n) => (n === basename(from) ? basename(to) : n)) : names.filter((n) => n !== basename(from))
+    }
+    if (nk !== k || list !== names) changed = true
+    order[nk] = list
+  }
+  if (!changed) return
+  useStore.setState({ order })
+  await s.writeMeta('order.json', order)
+}
+
 function bump(path: string) {
   useStore.setState((s) => ({ revisions: { ...s.revisions, [path]: (s.revisions[path] ?? 0) + 1 } }))
 }
@@ -726,10 +882,24 @@ function escapeRe(s: string) {
 export const pendingEdits = new Map<string, string>()
 
 /** The live editor, so other panes (the Desk) can stitch into it. */
+/** The focused Thread's editor (for the / menu, the Stitching panel, sub-thread buttons). */
 export const editorBus: {
   insertQuote: ((quote: string, stitch: string) => void) | null
   insertStitch: ((target: string) => void) | null
 } = { insertQuote: null, insertStitch: null }
+
+/** Every open editor by path, so a quote can go to a particular pane's Thread. */
+export const editors = new Map<string, { insertQuote: (quote: string, stitch: string) => void }>()
+
+/** What a PDF selection carries when dragged into a Thread. */
+export const QUOTE_MIME = 'application/x-thread-quote'
+export interface QuoteDrag {
+  pdf: string
+  text: string
+  page: number
+  rects: Highlight['rects']
+  dye: string
+}
 
 export type { VaultEntry }
 

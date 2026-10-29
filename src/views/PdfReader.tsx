@@ -2,13 +2,16 @@
 import * as pdfjs from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { useStore, type Highlight, useDyeColor } from '../core/store'
+import { QUOTE_MIME, useStore, type Highlight, type QuoteDrag, useDyeColor } from '../core/store'
 import { Icon } from '../components/Icon'
 import { BASE } from '../core/base'
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
 
 type PDFDoc = Awaited<ReturnType<typeof pdfjs.getDocument>['promise']>
+
+/** The Dye a dragged quote gets: the last one picked in the toolbar. */
+let lastDye = 'quote'
 
 export interface HighlightRequest {
   text: string
@@ -25,15 +28,25 @@ export function PdfReader({
   highlights,
   onHighlight,
   onDelete,
+  targets = [],
+  defaultTarget = null,
 }: {
   path: string
   page: number
   highlight?: string
   nonce: number
   highlights: Highlight[]
-  onHighlight: (h: HighlightRequest) => void
+  /** `target`: the Thread to quote into (null = none open). */
+  onHighlight: (h: HighlightRequest, target: string | null) => void
   onDelete: (id: string) => void
+  /** Threads open beside this PDF, offered as destinations. */
+  targets?: { path: string; name: string }[]
+  defaultTarget?: string | null
 }) {
+  const [target, setTarget] = useState<string | null>(defaultTarget)
+  useEffect(() => {
+    if (!target || !targets.some((t) => t.path === target)) setTarget(defaultTarget ?? targets[0]?.path ?? null)
+  }, [defaultTarget, targets.map((t) => t.path).join('|')])
   const adapter = useStore((s) => s.adapter)
   const dyeColor = useDyeColor()
   const threads = useStore((s) => s.threads)
@@ -141,24 +154,41 @@ export function PdfReader({
     }
   })
 
-  const onMouseUp = () => {
+  /** The current text selection inside this reader, as a highlight request. */
+  const selection = () => {
     const sel = window.getSelection()
     const text = sel?.toString().replace(/\s+/g, ' ').trim()
-    if (!sel || !text || sel.rangeCount === 0) {
-      setToolbar(null)
-      return
-    }
+    if (!sel || !text || sel.rangeCount === 0) return null
     const range = sel.getRangeAt(0)
     const startEl = (range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement) as HTMLElement
     const pageEl = startEl?.closest<HTMLElement>('.pdf-page')
-    if (!pageEl) return
+    if (!pageEl || !scroller.current?.contains(pageEl)) return null
     const box = pageEl.getBoundingClientRect()
     const rects = [...range.getClientRects()]
       .filter((r) => r.width > 1 && r.height > 1 && r.top >= box.top - 2 && r.bottom <= box.bottom + 2)
       .map((r) => ({ x: (r.left - box.left) / box.width, y: (r.top - box.top) / box.height, w: r.width / box.width, h: r.height / box.height }))
-    if (!rects.length) return
-    const last = range.getBoundingClientRect()
-    setToolbar({ x: Math.min(last.right, innerWidth - 320), y: last.bottom + 10, req: { text, page: Number(pageEl.dataset.page), rects: mergeRects(rects) } })
+    if (!rects.length) return null
+    return { req: { text, page: Number(pageEl.dataset.page), rects: mergeRects(rects) }, last: range.getBoundingClientRect() }
+  }
+
+  const onMouseUp = () => {
+    const hit = selection()
+    if (!hit) {
+      if (!window.getSelection()?.toString().trim()) setToolbar(null)
+      return
+    }
+    setToolbar({ x: Math.min(hit.last.right, innerWidth - 320), y: hit.last.bottom + 10, req: hit.req })
+  }
+
+  // Drag the selected passage into any open Thread: it lands there as a quote + Deep Stitch.
+  const onDragStart = (e: React.DragEvent) => {
+    const hit = selection()
+    if (!hit) return
+    const q: QuoteDrag = { pdf: path, ...hit.req, dye: lastDye }
+    e.dataTransfer.setData(QUOTE_MIME, JSON.stringify(q))
+    e.dataTransfer.setData('text/plain', hit.req.text)
+    e.dataTransfer.effectAllowed = 'copy'
+    setToolbar(null)
   }
 
   const dyes = useMemo(() => {
@@ -188,7 +218,7 @@ export function PdfReader({
         </button>
       </div>
       <div className="reader__body">
-        <div className="reader__pages" ref={scroller} onScroll={onScroll} onMouseUp={onMouseUp}>
+        <div className="reader__pages" ref={scroller} onScroll={onScroll} onMouseUp={onMouseUp} onDragStart={onDragStart}>
           {error && <div className="reader__empty">Could not open this PDF. {error}</div>}
           {!doc && !error && <div className="reader__empty mono">[ UNSPOOLING PDF… ]</div>}
           {doc &&
@@ -212,7 +242,9 @@ export function PdfReader({
             [ Highlights · {highlights.length} ]
           </div>
           {highlights.length === 0 && (
-            <p style={{ fontSize: 12, color: 'rgba(244,238,211,.55)' }}>Select text on a page, then pick a Dye to pull it into your Thread as a Deep Stitch.</p>
+            <p style={{ fontSize: 12, color: 'rgba(244,238,211,.55)' }}>
+              Select text on a page, then pick a Dye — or drag the selection into any Thread open beside this PDF. It lands as a quote with a Deep Stitch back to this page.
+            </p>
           )}
           {[...highlights]
             .sort((a, b) => a.page - b.page || a.rects[0].y - b.rects[0].y)
@@ -240,24 +272,36 @@ export function PdfReader({
           style={{ left: Math.max(8, Math.min(toolbar.x - 160, innerWidth - 340)), top: Math.min(toolbar.y, innerHeight - 70) }}
           onMouseDown={(e) => e.preventDefault()}
         >
-          <span className="label">Dye →</span>
-          {dyes.map((d) => (
-            <button
-              key={d}
-              className="dye dye--sm"
-              style={{ ['--c' as any]: dyeColor(d) }}
-              onClick={() => {
-                onHighlight({ ...toolbar.req, dye: d })
-                setToolbar(null)
-                window.getSelection()?.removeAllRanges()
-              }}
-            >
-              {d}
+          <div className="hl-toolbar__row">
+            <span className="label">Dye →</span>
+            {dyes.map((d) => (
+              <button
+                key={d}
+                className="dye dye--sm"
+                style={{ ['--c' as any]: dyeColor(d) }}
+                onClick={() => {
+                  lastDye = d
+                  onHighlight({ ...toolbar.req, dye: d }, target)
+                  setToolbar(null)
+                  window.getSelection()?.removeAllRanges()
+                }}
+              >
+                {d}
+              </button>
+            ))}
+            <button className="icon-btn" onClick={() => setToolbar(null)}>
+              <Icon name="close" size={14} />
             </button>
-          ))}
-          <button className="icon-btn" onClick={() => setToolbar(null)}>
-            <Icon name="close" size={14} />
-          </button>
+          </div>
+          <div className="hl-toolbar__row hl-toolbar__into">
+            <span className="label">Into →</span>
+            {targets.length === 0 && <span className="muted">a new “Notes on…” Thread · or drag the selection into a Thread</span>}
+            {targets.map((t) => (
+              <button key={t.path} className={'chip-btn' + (t.path === target ? ' is-on' : '')} onClick={() => setTarget(t.path)}>
+                {t.name}
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>

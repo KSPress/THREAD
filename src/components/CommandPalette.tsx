@@ -47,8 +47,8 @@ function Palette() {
       },
       { id: 'c:home', title: 'Go to the Loom', hint: 'Alt 1', icon: 'home', run: () => s.setView('home') },
       { id: 'c:tap', title: 'Open the Tapestry', hint: 'Alt 3', icon: 'tapestry', run: () => s.setView('tapestry') },
-      { id: 'c:desk', title: 'Open the Desk', hint: 'Alt 4', icon: 'desk', run: () => s.setView('desk') },
-      { id: 'c:comp', title: 'Open the Compiler', hint: 'Alt 5', icon: 'compiler', run: () => s.setView('compiler') },
+      { id: 'c:beside', title: 'Open a PDF or Thread beside this one', icon: 'desk', run: () => s.openDesk(null) },
+      { id: 'c:comp', title: 'Open the Compiler', hint: 'Alt 4', icon: 'compiler', run: () => s.setView('compiler') },
       { id: 'c:set', title: 'Personalize THREAD', hint: 'Ctrl ,', icon: 'settings', run: () => s.set({ settingsOpen: true }) },
       {
         id: 'c:theme',
@@ -71,7 +71,7 @@ function Palette() {
     }))
     const pdfs = Object.values(s.files)
       .filter((f) => f.kind === 'pdf')
-      .map((f) => ({ id: f.path, title: f.path.split('/').pop()!, hint: 'PDF · Desk', icon: 'pdf', run: () => s.openDesk(f.path) }))
+      .map((f) => ({ id: f.path, title: f.path.split('/').pop()!, hint: 'PDF · opens beside', icon: 'pdf', run: () => s.openDesk(f.path) }))
     const all = [...threads, ...pdfs, ...commands]
     if (!q) {
       const recent = s.recent.map((p) => threads.find((t) => t.id === p)).filter(Boolean) as Omit<Item, 'score'>[]

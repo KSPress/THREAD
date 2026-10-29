@@ -58,7 +58,7 @@ export const SLASH_ITEMS: MenuItem[] = [
     if (!e.isActive('taskItem')) e.chain().toggleTaskList().run()
     e.chain().insertContent(` 📅 ${iso}`).run()
   }),
-  block('desk', 'Deep Stitch', '❞', 'Weave', 'Open the Desk to quote a PDF', () => useStore.getState().openDesk(null)),
+  block('desk', 'Deep Stitch', '❞', 'Weave', 'Open a PDF beside this Thread, then drag a passage in', () => useStore.getState().openDesk(null)),
 ]
 
 function pickImage(editor: Editor) {

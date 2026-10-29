@@ -20,7 +20,8 @@ A local-first, Core/Host workspace for worldbuilders and writers. It takes Notio
 | **Project** | A folder. Clicking it opens its dashboard Thread (`Project/Project.md`). |
 | **Tapestry** | The graph view, with two modes: **Web** (force-directed) and **Loom** (git-graph-style lanes). |
 | **Pinboard** | An infinite Excalidraw canvas, saved as a fenced `thread-pinboard` JSON block inside a Thread. |
-| **The Desk** | PDF reader on the left, the active Thread on the right. |
+| **Panes** | The Canvas shows up to four Threads, Cords and PDFs side by side. Drag them in from the Spool. |
+| **Cross-stitch** | A PDF passage dragged into an open Thread: a quote plus a Deep Stitch back to the exact spot. |
 | **The Compiler** | Binds Threads into a print-ready PDF or DOCX, or uses Pandoc on desktop. |
 
 ## What's in the box
@@ -39,15 +40,19 @@ A local-first, Core/Host workspace for worldbuilders and writers. It takes Notio
 - **Thread appearance**: give any Thread its own **icon** (361 Lineicons in four styles: stroke, solid, duotone and bulk), **color** and **background** (a generated backdrop tinted with the Thread's color, a solid color or an image). Icons follow the Thread's color, which by default is its first Dye's color, so they change with the Dye palette. These are stored as `icon:`, `color:` and `background:` in the frontmatter.
 - **Dyes**: rename a Dye (every Thread and highlight is rewritten, and renaming onto an existing Dye merges the two), recolor it, or remove it everywhere. Use **Edit** in the Spool's Dye list or right-click a Dye. **Dye…** in a Thread's menu adds or removes Dyes without opening it.
 - **Sub-threads**: the **Sub-thread** button above the title, `/sub-thread` in the editor, "New sub-thread" in the Spool menu, or drop a Thread onto another in the Spool. The Spool nests them under their parent, and the Stitching panel lists them.
-- **Spool** (left): a floating rail and a nested Project tree. Rows have punchy hover states, a right-click menu (new, rename, delete), drag-to-move and OS file drops. Below the tree is a Dye list that filters the Spool.
+- **Spool** (left): nested pages, like Notion's sidebar.
+  - Every Thread and Project can hold pages. Its arrow expands it; an empty one says "No pages inside".
+  - Hover a row for **+** (a new page inside it, named right in the Spool) and **⋯** (rename, dye, style, open beside, delete). **Add a page** sits at the end of the tree. Double-click a row to rename it; renaming a page also updates a title that matched its old name.
+  - Drag a row onto the top or bottom edge of another to put it there, or onto its middle to nest it inside. The order is saved in `.thread/order.json`, so it follows the vault to every device.
+  - OS file drops import into the folder or page you drop on. Below the tree is a Dye list that filters the Spool.
 - **Stitching** (right): backlinks with the surrounding line, outgoing Stitches, an outline, Dye editing with palette swatches, and tactile frontmatter controls. Properties use rocker toggles, rotary knobs for numbers, dates, lists and Stitch properties.
 - **Tables**: typed columns (Text, Number with Σ totals, Stitch, Dye, Check, Date), sorting and add/remove. Stitch cells are real links, so relations show up in the Tapestry and in backlinks.
-- **The Desk**: a pdf.js reader with a text layer.
-  1. Select a passage.
-  2. Pick a Dye.
-  3. THREAD records a coordinate-level highlight (`.thread/highlights/…json`), then inserts the quote and a Deep Stitch into the active Thread.
-
-  Clicking that Deep Stitch later reopens the PDF scrolled to the highlight, which flashes.
+- **Side-by-side panes** (this replaces the old Desk tab):
+  - Drag a Thread, Cord or PDF from the Spool onto the Canvas to open it beside what's there; a line shows where it will land. You can also drop PDFs from your computer, or use the **Open beside** button. Up to four panes; drag the gap between panes to resize them.
+  - PDFs open in a pdf.js reader with a text layer. **Cross-stitch** a passage by selecting it and dragging it into any open Thread or Cord: it lands where you drop it as a quote with a Deep Stitch (`[[Research.pdf#page=12&highlight=h4f2]]`), and the highlight is saved on the PDF (`.thread/highlights/…json`). Dragging the same passage into several Threads reuses one highlight.
+  - Without dragging: select a passage, pick a Dye, and choose which open Thread it goes **Into**. With no Thread open beside it, THREAD starts a "Notes on …" Thread.
+  - Clicking a Deep Stitch opens its PDF beside the Thread, scrolled to the highlight, which flashes.
+  - On phones, panes become tabs above the page.
 - **Compiler**: drag-and-drop manuscript cards with roles (Title, Front, Chapter, Appendix), a paginated preview, page size, serif or sans, running header, page numbers and chapter breaks. It strips UI-only syntax (Dyes, Stitch brackets, Pinboards, table schemas) before typesetting. Exports go to PDF (pdfmake), DOCX (docx) or clean Markdown. On desktop, Pandoc can also produce PDF, DOCX or EPUB.
 - **Personalization** ("Make your THREAD your own"):
   - Backdrops: generated halftone clouds, pixel-mosaic clouds, aurora radial blur, paper, or your own image.
@@ -74,7 +79,7 @@ A local-first, Core/Host workspace for worldbuilders and writers. It takes Notio
   - Phone portrait and iPad portrait get a bottom navigation bar.
   - Phones in landscape get a slim side rail.
   - The Spool and Stitching panels become overlays you dismiss with a tap outside.
-  - Touch-only controls: "⋯" row menus, up/down manuscript buttons, and long-press text selection at the Desk.
+  - Touch-only controls: always-visible "+" and "⋯" row buttons, up/down manuscript buttons, and long-press text selection in PDFs.
   - In the browser THREAD is an installable PWA (manifest + service worker) that opens and edits offline.
 - **Keyboard**:
 
@@ -89,7 +94,7 @@ A local-first, Core/Host workspace for worldbuilders and writers. It takes Notio
 
 | | |
 | --- | --- |
-| ![Canvas](docs/screenshots/canvas.jpg) | ![The Desk](docs/screenshots/desk.jpg) |
+| ![Canvas](docs/screenshots/canvas.jpg) | ![A PDF and a Thread side by side, cross-stitched](docs/screenshots/panes.jpg) |
 | ![Tapestry — Web](docs/screenshots/tapestry-web.jpg) | ![Tapestry — Loom lanes](docs/screenshots/tapestry-loom.jpg) |
 | ![Compiler](docs/screenshots/compiler.jpg) | ![Pinboard](docs/screenshots/pinboard.jpg) |
 | ![Dark mode + pixel backdrop](docs/screenshots/dark-home.jpg) | ![Personalize](docs/screenshots/personalize.jpg) |
@@ -156,6 +161,14 @@ npm test               # editor round-trip, core, exports, and a live Loom with 
 npm run build          # production web build in dist/
 ```
 
+### Updates
+
+The browser version on GitHub Pages is the update source for everything:
+
+- **Browser / installed web app**: while it's open, THREAD checks for a newer build and shows **A newer THREAD is ready → Update now**. Open edits are saved before it reloads.
+- **Desktop and Android apps**: at launch THREAD loads the newest published build when you're online, so changes appear without reinstalling. It runs inside the app, so your vault, settings and native features (folders, notifications, Google sign-in) are unchanged. Offline, or if the site can't be reached, the app starts the build it shipped with. **Make it yours → Updates** shows the running build, has **Check for updates**, and can turn this off.
+- Changes to the native (Rust) side still need a new installer from the downloads below. Apps installed before this feature need that one reinstall to get the updater.
+
 ### Downloads (built automatically on every push)
 
 | Platform | Where |
@@ -216,7 +229,7 @@ src/editor/     TipTap extensions: Stitch, Table, Pinboard, image, slash menu, S
 src/cord/       Cords: file model, pagination, ribbon, footnotes, print and DOCX export
 src/assets/icons/ Lineicons 5.2 Free sets (lineicons.com, free license), built by scripts/build-icons.mjs
 src/components/ Rail, Spool, Stitching, palette, settings, backdrop, logo, icons
-src/views/      Home (the Loom), Canvas, Tapestry, Desk (+ PdfReader), Compiler
+src/views/      Home (the Loom), Canvas (panes + PdfReader), Tapestry, Compiler
 src/styles/     design tokens + the component styles
 shared/         CRDT helpers shared by the app and the Loom
 loom/           the Host server + Dockerfile
@@ -255,7 +268,7 @@ All items listed above work and were tested as described in the Testing section.
 
 Not built yet:
 
-- **ePub at the Desk.** The design document allows "PDF/ePub", but only PDF is implemented. A `.epub` file is recognized and can be stitched to, but it does not open in the reader yet.
+- **ePub reading.** The design document allows "PDF/ePub", but only PDF is implemented. A `.epub` file is recognized and can be stitched to, but it does not open in the reader yet.
 - **Rename/delete conflicts across Satellites.** These use last-writer-wins. Edits to the text inside a Thread are fully merged.
 - **Signed releases and mobile store builds.** The Tauri project is ready for `tauri android/ios init`, but no signed builds have been made. On phones THREAD runs as the PWA.
 - **Reminders while THREAD is closed** come from Google Calendar or the ICS feed. THREAD has no push server of its own.

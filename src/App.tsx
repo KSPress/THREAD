@@ -17,11 +17,10 @@ import { CanvasView } from './views/CanvasView'
 import { HomeView } from './views/HomeView'
 
 // Heavier views (pdf.js, pdfmake/docx, the graph) load on first use.
-const DeskView = lazy(() => import('./views/DeskView').then((m) => ({ default: m.DeskView })))
 const CompilerView = lazy(() => import('./views/CompilerView').then((m) => ({ default: m.CompilerView })))
 const TapestryView = lazy(() => import('./views/TapestryView').then((m) => ({ default: m.TapestryView })))
 
-const VIEWS: View[] = ['home', 'canvas', 'tapestry', 'desk', 'compiler']
+const VIEWS: View[] = ['home', 'canvas', 'tapestry', 'compiler']
 
 export function App() {
   useApplyTheme()
@@ -75,7 +74,7 @@ export function App() {
         e.preventDefault()
         const dir = s.active ? s.active.split('/').slice(0, -1).join('/') : ''
         void s.createThread(dir, 'Untitled').then((p) => s.open(p))
-      } else if (e.altKey && /^[1-5]$/.test(e.key)) {
+      } else if (e.altKey && /^[1-4]$/.test(e.key)) {
         e.preventDefault()
         s.setView(VIEWS[parseInt(e.key, 10) - 1])
       }
@@ -105,7 +104,6 @@ export function App() {
             {view === 'home' && <HomeView />}
             {view === 'canvas' && <CanvasView />}
             {view === 'tapestry' && <TapestryView />}
-            {view === 'desk' && <DeskView />}
             {view === 'compiler' && <CompilerView />}
           </Suspense>
         </main>

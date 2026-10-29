@@ -61,5 +61,5 @@ export async function reopenFolder(): Promise<boolean> {
 
 export async function closeVault() {
   localStorage.removeItem(LAST)
-  useStore.setState({ adapter: null, files: {}, threads: {}, active: null, view: 'home' })
+  useStore.setState({ adapter: null, files: {}, threads: {}, active: null, view: 'home', panes: [] })
 }

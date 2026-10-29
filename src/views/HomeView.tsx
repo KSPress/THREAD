@@ -103,8 +103,8 @@ export function HomeView() {
               >
                 <Icon name="folder" size={14} /> New Project
               </button>
-              <button className="btn" onClick={() => setView('desk')}>
-                <Icon name="desk" size={14} /> The Desk
+              <button className="btn" onClick={() => useStore.getState().openDesk(null)}>
+                <Icon name="desk" size={14} /> Read a PDF
               </button>
               <button className="btn" onClick={() => setView('compiler')}>
                 <Icon name="compiler" size={14} /> Compile

@@ -4,10 +4,10 @@ import { EditorContent, useEditor, type Editor } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
 import { NodeSelection } from '@tiptap/pm/state'
 import { useEffect, useMemo, useRef } from 'react'
-import { editorBus, pendingEdits, useStore } from '../core/store'
+import { editorBus, editors, pendingEdits, useStore } from '../core/store'
+import { dropQuote, quoteContent } from './quoteDrop'
 import { useSettings } from '../core/settings'
 import { kindOf, stem } from '../core/paths'
-import { parseStitch } from '../core/markdown'
 import { editorExtensions } from './extensions'
 import { onBeforeReload } from '../core/update'
 
@@ -42,7 +42,8 @@ export function ThreadEditor({ path, onEditor }: { path: string; onEditor?: (e: 
           void insertFiles(files)
           return true
         },
-        handleDrop: (_view, event) => {
+        handleDrop: (view, event) => {
+          if (dropQuote(editorRef.current, view, event as DragEvent, path)) return true
           const files = [...((event as DragEvent).dataTransfer?.files ?? [])]
           if (!files.length) return false
           event.preventDefault()
@@ -58,6 +59,9 @@ export function ThreadEditor({ path, onEditor }: { path: string; onEditor?: (e: 
     },
     [path],
   )
+
+  const editorRef = useRef<Editor | null>(null)
+  editorRef.current = editor
 
   async function insertFiles(files: File[]) {
     const s = useStore.getState()
@@ -94,34 +98,29 @@ export function ThreadEditor({ path, onEditor }: { path: string; onEditor?: (e: 
     editor.commands.setTextSelection({ from: Math.min(from, max), to: Math.min(to, max) })
   }, [revision, editor, path])
 
-  // Let the Desk stitch quotes into whichever editor is live.
+  // Quotes from PDF panes can target this editor; the focused one also serves the / menu and buttons.
+  const isActive = useStore((s) => s.active === path)
   useEffect(() => {
     if (!editor) return
     onEditor?.(editor)
-    editorBus.insertQuote = (quote, stitch) => {
-      const s = parseStitch(stitch.replace(/^\[\[|\]\]$/g, ''))
-      editor
-        .chain()
-        .focus('end')
-        .insertContent([
-          {
-            type: 'blockquote',
-            content: [
-              { type: 'paragraph', content: [{ type: 'text', text: quote }] },
-              { type: 'paragraph', content: [{ type: 'stitch', attrs: { target: s.target, anchor: s.anchor ?? null, alias: s.alias ?? null } }] },
-            ],
-          },
-          { type: 'paragraph' },
-        ])
-        .run()
-    }
-    editorBus.insertStitch = (target) => editor.chain().focus().insertStitch({ target }).run()
+    const insertQuote = (quote: string, stitch: string) => editor.chain().focus('end').insertContent(quoteContent(quote, stitch)).run()
+    editors.set(path, { insertQuote })
     return () => {
       onEditor?.(null)
-      editorBus.insertQuote = null
-      editorBus.insertStitch = null
+      if (editors.get(path)?.insertQuote === insertQuote) editors.delete(path)
     }
-  }, [editor])
+  }, [editor, path])
+  useEffect(() => {
+    if (!editor || !isActive) return
+    const insertQuote = (quote: string, stitch: string) => editor.chain().focus('end').insertContent(quoteContent(quote, stitch)).run()
+    const insertStitch = (target: string) => editor.chain().focus().insertStitch({ target }).run()
+    editorBus.insertQuote = insertQuote
+    editorBus.insertStitch = insertStitch
+    return () => {
+      if (editorBus.insertQuote === insertQuote) editorBus.insertQuote = null
+      if (editorBus.insertStitch === insertStitch) editorBus.insertStitch = null
+    }
+  }, [editor, isActive])
 
   if (!editor) return null
   return (

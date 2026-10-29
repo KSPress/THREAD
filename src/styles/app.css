@@ -12,6 +12,12 @@ body,
   height: 100%;
   margin: 0;
 }
+/* The app never scrolls as a page; `clip` also stops focus/scrollIntoView from nudging it. */
+html,
+body {
+  overflow: hidden;
+  overflow: clip;
+}
 body {
   background: var(--bg);
   color: var(--text);
@@ -4695,5 +4701,370 @@ button.dye:hover {
 @media (max-width: 860px) {
   .update-banner {
     bottom: calc(92px + env(safe-area-inset-bottom));
+  }
+}
+
+/* ================================================================ */
+/* Spool: Notion-style nesting                                       */
+/* ================================================================ */
+.tree-row .chev {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 22px;
+  margin: 0 -4px 0 -4px;
+  border-radius: 5px;
+  opacity: 0.4;
+}
+.tree-row .chev:hover {
+  background: rgba(127, 127, 127, 0.22);
+}
+.tree-row .chev--none {
+  pointer-events: none;
+}
+.tree-row__actions {
+  display: none;
+  align-items: center;
+  gap: 1px;
+  margin-right: -4px;
+}
+.tree-row:hover .tree-row__actions,
+.tree-row:focus-within .tree-row__actions,
+.tree-row:focus-visible .tree-row__actions {
+  display: flex;
+}
+.tree-row:hover .count,
+.tree-row:focus-within .count {
+  display: none;
+}
+.tree-row__actions .tree-row__more,
+.tree-row__add {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  border-radius: 6px;
+  opacity: 0.75;
+}
+.tree-row__add:hover {
+  background: rgba(127, 127, 127, 0.22);
+  opacity: 1;
+}
+@media (hover: none) {
+  .tree-row__actions {
+    display: flex;
+  }
+  .tree-row .count {
+    display: none;
+  }
+}
+.tree-row.is-in-pane .name {
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-underline-offset: 3px;
+}
+.tree-row.drop-inside {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.tree-row.drop-before::after,
+.tree-row.drop-after::after {
+  content: '';
+  position: absolute;
+  left: calc(8px + var(--depth, 0) * 14px);
+  right: 6px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+  pointer-events: none;
+}
+.tree-row.drop-before::after {
+  top: -2px;
+}
+.tree-row.drop-after::after {
+  bottom: -2px;
+}
+.tree-children {
+  position: relative;
+}
+/* Indentation guide, like Notion's nested pages. */
+.tree-children::before {
+  content: '';
+  position: absolute;
+  left: calc(16px + (var(--depth, 1) - 1) * 14px);
+  top: 2px;
+  bottom: 2px;
+  width: 1px;
+  background: var(--line);
+}
+.tree-empty {
+  height: 28px;
+  display: flex;
+  align-items: center;
+  padding-left: calc(30px + var(--depth, 0) * 14px);
+  font-size: 12px;
+  color: var(--muted);
+}
+.tree-addpage {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  height: 30px;
+  padding: 0 8px 0 11px;
+  border-radius: 9px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.tree-addpage:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+/* ================================================================ */
+/* Canvas workspace: documents side by side                          */
+/* ================================================================ */
+.workspace {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 0;
+}
+.pane {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.workspace.is-multi .pane {
+  min-width: 300px;
+}
+.pane > .canvas-scroll {
+  flex: 1;
+}
+.pane > .reader {
+  flex: 1;
+  min-height: 0;
+}
+.pane > .cord {
+  flex: 1;
+}
+.pane__head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  margin: 0 4px 6px;
+  padding: 0 4px 0 12px;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--paper) calc(var(--glass) * 100%), transparent);
+  backdrop-filter: blur(14px);
+  border: 1.5px solid var(--line);
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.pane__head b {
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pane__kind {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--surface-2);
+}
+.pane.is-focused .pane__head {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.pane__loading {
+  padding: 40px;
+  text-align: center;
+}
+.pane-split {
+  flex: none;
+  width: 12px;
+  cursor: col-resize;
+  position: relative;
+  touch-action: none;
+}
+.pane-split::after {
+  content: '';
+  position: absolute;
+  top: 40%;
+  bottom: 40%;
+  left: 5px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--line-strong);
+  transition: background var(--t-fast);
+}
+.pane-split:hover::after {
+  background: var(--accent);
+  top: 20%;
+  bottom: 20%;
+}
+.pane.drop-before::before,
+.pane.drop-after::after {
+  content: '';
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  width: 4px;
+  border-radius: 3px;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent);
+  z-index: 5;
+}
+.pane.drop-before::before {
+  left: -7px;
+}
+.pane.drop-after::after {
+  right: -3px;
+}
+.workspace__hint {
+  position: absolute;
+  left: 50%;
+  top: 10px;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--frame);
+  color: var(--cream);
+  font-size: 12.5px;
+  pointer-events: none;
+  box-shadow: var(--shadow-pop);
+}
+.editor-card.is-drop {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.pane-tabs {
+  flex: none;
+  display: flex;
+  gap: 4px;
+  padding: 0 4px 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.pane-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 46vw;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--paper) calc(var(--glass) * 100%), transparent);
+  border: 1.5px solid var(--line);
+  font-size: 12.5px;
+  color: var(--text-2);
+  flex: none;
+}
+.pane-tab span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pane-tab.is-on {
+  background: var(--frame);
+  color: var(--cream);
+  border-color: var(--frame);
+}
+.scrim-clear {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+}
+.open-beside {
+  position: fixed;
+  z-index: 81;
+  width: min(340px, calc(100vw - 16px));
+  max-height: min(70vh, 520px);
+  overflow: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.open-beside .input {
+  margin-bottom: 6px;
+}
+.open-beside__label {
+  margin: 8px 6px 4px;
+}
+.open-beside__item {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  align-items: center;
+  column-gap: 8px;
+  padding: 7px 8px;
+  border-radius: 9px;
+  text-align: left;
+  font-size: 13px;
+}
+.open-beside__item small {
+  grid-column: 2;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.open-beside__item:hover {
+  background: var(--hover-bg);
+  color: var(--hover-text);
+}
+.open-beside__item:hover small {
+  color: inherit;
+  opacity: 0.7;
+}
+.open-beside__import {
+  margin-top: 6px;
+  border-top: 1.5px solid var(--line);
+  border-radius: 0 0 9px 9px;
+}
+.open-beside__tip {
+  font-size: 11.5px;
+  margin: 6px 8px 2px;
+}
+.hl-toolbar {
+  flex-direction: column;
+  align-items: stretch;
+}
+.hl-toolbar__row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.hl-toolbar__into {
+  padding-top: 6px;
+  border-top: 1.5px solid var(--line);
+  font-size: 12px;
+}
+.hl-toolbar__into .chip-btn {
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 860px) {
+  .pane__head {
+    display: none;
   }
 }
