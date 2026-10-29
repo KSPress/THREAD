@@ -1,6 +1,8 @@
 // Choosing, remembering and reopening vaults.
 import { seedVault } from './seed'
 import { useStore } from './store'
+import { useSettings } from './settings'
+import { rememberVault } from './vaults'
 import { BrowserVault, FolderVault, isDesktopApp, isTauri, TauriVault, type VaultAdapter } from './vault'
 
 const LAST = 'thread.lastVault'
@@ -18,9 +20,19 @@ export function lastVault(): Last | null {
 export async function openAdapter(adapter: VaultAdapter, opts: { seed?: boolean } = {}) {
   const entries = await adapter.list()
   if (opts.seed && entries.filter((e) => !e.path.startsWith('.')).length === 0) await seedVault(adapter)
+  // A new, empty vault still exists (and is listed) before its first Thread.
+  if (!entries.some((e) => e.path === '.thread/vault.json')) {
+    await adapter.writeText('.thread/vault.json', JSON.stringify({ created: new Date().toISOString() }) + '\n').catch(() => {})
+  }
   const last: Last =
     adapter instanceof TauriVault ? { kind: 'tauri', root: adapter.root } : adapter.kind === 'folder' ? { kind: 'folder' } : { kind: 'browser', name: adapter.name }
   localStorage.setItem(LAST, JSON.stringify(last))
+  rememberVault({
+    name: adapter.name,
+    kind: adapter instanceof TauriVault ? 'tauri' : adapter.kind === 'folder' ? 'folder' : 'device',
+    root: adapter instanceof TauriVault ? adapter.root : undefined,
+    loom: useSettings.getState().loomUrl || undefined,
+  })
   await useStore.getState().openVault(adapter)
 }
 

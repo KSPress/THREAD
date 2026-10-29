@@ -67,7 +67,7 @@ await send('Inspector.enable').catch(() => {})
 await step('app rendered', () => waitFor('.welcome, .app', 60000))
 log('first screen:', await evaluate(`document.querySelector('.welcome') ? 'welcome' : document.querySelector('.app') ? 'app' : 'blank'`))
 if (scenario === 'newvault') {
-  await step('tap Start a new vault', () => clickText('Start a new vault'))
+  await step('tap New vault', () => clickText('New vault'))
   await wait(800)
   await step('name it', () => fill('input[aria-label="Vault name"]', 'Phone Vault'))
   await step('tap Create', () => clickText('Create', 'button[type=submit]'))
@@ -82,7 +82,7 @@ if (scenario === 'newvault') {
   await step('editor shown', () => waitFor('.thread-editor', 15000))
 }
 if (scenario === 'sample') {
-  await step('tap Explore the sample world', () => clickText('Explore the sample world'))
+  await step('tap the sample world', () => clickText('The Ashen Reach', '.vault-row'))
   await step('vault opened', () => waitFor('.home', 90000))
   await wait(8000)
   await step('open a Thread', async () => {
@@ -105,7 +105,7 @@ if (scenario === 'sample') {
   await step('PDF text layer', () => waitFor('.pdf-page .textLayer span', 20000))
 }
 if (scenario === 'loom') {
-  await step('open Loom form', () => clickText('Connect to a Loom'))
+  await step('open Loom form', () => clickText('Join a Loom'))
   await wait(500)
   await step('fill URL', () => fill('.welcome form input', 'http://10.0.2.2:7878'))
   await step('submit', () => clickText('Become a Satellite', 'button[type=submit]'))
