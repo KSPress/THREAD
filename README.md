@@ -247,7 +247,7 @@ tests/          vitest suites
 
 ## Testing
 
-`npm test` runs 40 tests. They cover:
+`npm test` runs 45 tests. They cover:
 
 - the editor's Markdown round trip
 - parsing and tables
