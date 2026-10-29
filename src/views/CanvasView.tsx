@@ -58,10 +58,19 @@ export function CanvasView() {
   )
   // Phones show one pane at a time, with tabs.
   const visible = compact ? panes.filter((p) => p.id === (shown && panes.some((x) => x.id === shown) ? shown : panes.find((x) => x.path === active)?.id ?? panes[0]?.id)) : panes
+  // Phones: show the focused Thread, or whatever was just opened (a PDF opened
+  // beside a Thread comes to the front instead of hiding behind a tab).
+  const seen = useRef(new Set<string>())
   useEffect(() => {
-    const p = panes.find((x) => x.path === active)
-    if (p) setShown(p.id)
-  }, [active, panes.length])
+    const added = panes.filter((x) => !seen.current.has(x.id))
+    panes.forEach((x) => seen.current.add(x.id))
+    const fresh = added[added.length - 1]
+    if (fresh && seen.current.size > added.length) setShown(fresh.id)
+    else {
+      const p = panes.find((x) => x.path === active)
+      if (p) setShown(p.id)
+    }
+  }, [active, panes.map((x) => x.id + x.nonce).join('|')])
 
   const crumbs = useMemo(() => {
     if (!active) return []
