@@ -49,3 +49,10 @@ describe('markdown round trip', () => {
     expect(roundtrip(out)).toBe(out)
   })
 })
+
+describe('indents', () => {
+  it('keeps a Tab indent through the Markdown file', () => {
+    const md = 'First line\n\n  An indented paragraph.\n'
+    expect(roundtrip(md).trim()).toBe(md.trim())
+  })
+})

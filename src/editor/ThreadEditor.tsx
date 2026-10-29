@@ -4,7 +4,8 @@ import { EditorContent, useEditor, type Editor } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
 import { NodeSelection } from '@tiptap/pm/state'
 import { useEffect, useMemo, useRef } from 'react'
-import { editorBus, editors, pendingEdits, useStore } from '../core/store'
+import { editorBus, editors, pendingEdits, renamedTo, useStore } from '../core/store'
+import { firstHeading } from '../core/markdown'
 import { dropQuote, quoteContent } from './quoteDrop'
 import { useSettings } from '../core/settings'
 import { kindOf, stem } from '../core/paths'
@@ -12,15 +13,28 @@ import { editorExtensions } from './extensions'
 import { onBeforeReload } from '../core/update'
 
 const SAVE_DELAY = 450
+/** Idle time before a changed title renames the file (the Spool follows the title). */
+const TITLE_DELAY = 1200
 
 export function ThreadEditor({ path, onEditor }: { path: string; onEditor?: (e: Editor | null) => void }) {
   const body = useStore((s) => s.threads[path]?.body ?? '')
   const revision = useStore((s) => s.revisions[path] ?? 0)
   const spellcheck = useSettings((s) => s.spellcheck)
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const titleTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const titleBefore = useRef<string | null>(null)
   const extensions = useMemo(() => editorExtensions(), [])
 
-  const flush = (p = path) => {
+  // The same editor lives on when its Thread is renamed (by its own title, or in
+  // the Spool), so typing is never interrupted; any other path is a new editor.
+  const pathRef = useRef(path)
+  const ident = useRef(path)
+  if (pathRef.current !== path) {
+    if (renamedTo.get(pathRef.current) !== path) ident.current = path
+    pathRef.current = path
+  }
+
+  const flush = (p = pathRef.current) => {
     clearTimeout(timer.current)
     const pending = pendingEdits.get(p)
     if (pending === undefined) return
@@ -52,12 +66,21 @@ export function ThreadEditor({ path, onEditor }: { path: string; onEditor?: (e: 
         },
       },
       onUpdate: ({ editor }) => {
-        pendingEdits.set(path, editor.getMarkdown())
+        const p = pathRef.current
+        if (titleBefore.current === null) titleBefore.current = firstHeading(useStore.getState().threads[p]?.body ?? '') ?? ''
+        pendingEdits.set(p, editor.getMarkdown())
         clearTimeout(timer.current)
-        timer.current = setTimeout(() => flush(path), SAVE_DELAY)
+        timer.current = setTimeout(() => flush(p), SAVE_DELAY)
+        clearTimeout(titleTimer.current)
+        titleTimer.current = setTimeout(async () => {
+          const before = titleBefore.current ?? ''
+          titleBefore.current = null
+          await flush(pathRef.current)
+          await useStore.getState().followTitle(pathRef.current, before)
+        }, TITLE_DELAY)
       },
     },
-    [path],
+    [ident.current],
   )
 
   const editorRef = useRef<Editor | null>(null)
@@ -75,6 +98,7 @@ export function ThreadEditor({ path, onEditor }: { path: string; onEditor?: (e: 
 
   // Save on switch / unmount.
   useEffect(() => () => void flush(path), [path])
+  useEffect(() => () => clearTimeout(titleTimer.current), [ident.current])
   useEffect(() => {
     const onHide = () => void flush(path)
     const unregister = onBeforeReload(() => flush(path))

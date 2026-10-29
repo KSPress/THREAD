@@ -125,7 +125,8 @@ interface State {
 
 interface Actions {
   openVault(adapter: VaultAdapter): Promise<void>
-  refresh(): Promise<void>
+  /** Re-read the vault. `also` lands in the same update (e.g. panes following a rename). */
+  refresh(also?: (s: State) => Partial<State>): Promise<void>
   open(path: string): void
   openStitch(target: string, anchor?: string): void
   resolve(target: string): string | null
@@ -145,6 +146,8 @@ interface Actions {
   renamePath(from: string, to: string): Promise<void>
   /** Move a file or folder into `dir` (created if needed), keeping its name unique there. Returns the new path. */
   movePath(from: string, dir: string): Promise<string>
+  /** Notion-style: a Thread named after its title (or still "Untitled") is renamed when its title changes. */
+  followTitle(path: string, titleBefore: string): Promise<void>
   setOrder(dir: string, names: string[]): Promise<void>
   deletePath(path: string): Promise<void>
   importFiles(dir: string, files: File[]): Promise<string[]>
@@ -222,7 +225,7 @@ export const useStore = create<State & Actions>((set, get) => ({
     await get().connectLoom()
   },
 
-  async refresh() {
+  async refresh(also) {
     const adapter = get().adapter
     if (!adapter) return
     const entries = await adapter.list()
@@ -241,7 +244,7 @@ export const useStore = create<State & Actions>((set, get) => ({
       }
     }
     await Promise.all(reads)
-    set({ files, threads })
+    set((s) => ({ files, threads, ...(also ? also(s) : {}) }))
   },
 
   open(path) {
@@ -334,9 +337,11 @@ export const useStore = create<State & Actions>((set, get) => ({
   async createThread(dir, name, body, fm) {
     const adapter = get().adapter!
     const base = safeName(name)
+    // Unique across the vault, not just the folder: Stitches link by name.
+    const taken = new Set(Object.keys(get().threads).map((p) => stem(p).toLowerCase()))
     let path = join(dir, `${base}.md`)
-    for (let i = 2; get().files[path] || (await adapter.exists(path)); i++) path = join(dir, `${base} ${i}.md`)
-    const content = joinFrontmatter(fm ?? {}, body ?? `# ${base}\n\n`)
+    for (let i = 2; get().files[path] || taken.has(stem(path).toLowerCase()) || (await adapter.exists(path)); i++) path = join(dir, `${base} ${i}.md`)
+    const content = joinFrontmatter(fm ?? {}, body ?? `# ${stem(path)}\n\n`)
     await get().saveThread(path, content)
     return path
   },
@@ -446,13 +451,23 @@ export const useStore = create<State & Actions>((set, get) => ({
     const adapter = get().adapter!
     if (from === to) return
     const isFolder = get().files[from]?.kind === 'folder'
+    let retitled = false
     // A page titled with its own name keeps them in step (renaming "Untitled" retitles it).
     const t = get().threads[from]
     if (t && t.kind === 'thread' && stem(from) !== stem(to)) {
       const re = new RegExp(`^# ${escapeRe(stem(from))}[ \\t]*$`, 'm')
-      if (re.test(t.body)) await get().saveThread(from, t.head + t.body.replace(re, `# ${stem(to)}`))
+      if (re.test(t.body)) {
+        await get().saveThread(from, t.head + t.body.replace(re, `# ${stem(to)}`))
+        retitled = true
+      }
     }
     await adapter.rename(from, to)
+    renamedTo.set(from, to)
+    const pending = pendingEdits.get(from)
+    if (pending !== undefined) {
+      pendingEdits.delete(from)
+      pendingEdits.set(to, pending)
+    }
     // A Thread's sub-threads travel with it.
     if (!isFolder && kindOf(from) === 'thread') {
       const fromDir = subThreadDir(from)
@@ -487,16 +502,16 @@ export const useStore = create<State & Actions>((set, get) => ({
     await sync?.rename(from, to)
     renameActivity(from, to)
     await rekeyOrder(from, to)
-    const active = get().active
-    await get().refresh()
     const moved = (p: string) => {
       if (p === from || p.startsWith(from + '/')) return to + p.slice(from.length)
       const sub = kindOf(from) === 'thread' && !isFolder ? subThreadDir(from) : null
       if (sub && p.startsWith(sub + '/')) return subThreadDir(to) + p.slice(sub.length)
       return p
     }
-    set((s) => ({ panes: s.panes.map((p) => ({ ...p, path: moved(p.path) })) }))
-    if (active) set({ active: moved(active) })
+    // Panes follow in the same update as the file list, so open editors stay mounted.
+    await get().refresh((s) => ({ panes: s.panes.map((p) => ({ ...p, path: moved(p.path) })), active: s.active ? moved(s.active) : s.active }))
+    // An open editor shows the new title.
+    if (retitled) bump(to)
   },
 
   async movePath(from, dir) {
@@ -509,6 +524,22 @@ export const useStore = create<State & Actions>((set, get) => ({
     for (let i = 2; get().files[to] || (await adapter.exists(to)); i++) to = join(dir, `${base} ${i}${ext}`)
     await get().renamePath(from, to)
     return to
+  },
+
+  async followTitle(path, titleBefore) {
+    const t = get().threads[path]
+    if (!t || t.kind !== 'thread' || typeof t.frontmatter.title === 'string') return
+    const title = firstHeading(t.body)
+    if (!title) return
+    const name = stem(path)
+    const following = name === titleBefore || name === safeName(titleBefore) || /^Untitled( \d+)?$/.test(name)
+    const next = safeName(title)
+    if (!following || next === name || next === 'Untitled') return
+    const adapter = get().adapter!
+    const ext = extname(path)
+    let to = join(dirname(path), next + ext)
+    for (let i = 2; get().files[to] || (await adapter.exists(to)); i++) to = join(dirname(path), `${next} ${i}${ext}`)
+    await get().renamePath(path, to)
   },
 
   async setOrder(dir, names) {
@@ -880,6 +911,8 @@ function escapeRe(s: string) {
  * instead of being overwritten by it (or overwriting it).
  */
 export const pendingEdits = new Map<string, string>()
+/** Recent renames (old path → new), so an open editor can follow its file. */
+export const renamedTo = new Map<string, string>()
 
 /** The live editor, so other panes (the Desk) can stitch into it. */
 /** The focused Thread's editor (for the / menu, the Stitching panel, sub-thread buttons). */

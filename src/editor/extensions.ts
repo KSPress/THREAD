@@ -10,6 +10,7 @@ import { Pinboard } from './Pinboard'
 import { Stitch } from './Stitch'
 import { ThreadTable } from './ThreadTable'
 import { VaultImage } from './VaultImage'
+import { Indent } from './Indent'
 
 /** Nodes and marks that define the document schema (and its Markdown form). */
 export function schemaExtensions(): Extensions {
@@ -39,5 +40,6 @@ export function editorExtensions(): Extensions {
     }),
     SlashCommand,
     StitchPicker,
+    Indent,
   ]
 }
