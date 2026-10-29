@@ -26,6 +26,17 @@ export async function openAdapter(adapter: VaultAdapter, opts: { seed?: boolean 
 
 /** Reopen the previous vault on launch when that needs no user gesture. */
 export async function restoreVault() {
+  try {
+    await reopenLast()
+  } catch (e) {
+    // A vault that can't be reopened (moved folder, cleared storage) falls back to Welcome.
+    console.warn('[boot] could not reopen the last vault', e)
+  } finally {
+    useStore.setState({ booting: false })
+  }
+}
+
+async function reopenLast() {
   if (isTauri()) {
     const { invoke } = await import('@tauri-apps/api/core')
     const fromCli = await invoke<string | null>('startup_vault').catch(() => null)

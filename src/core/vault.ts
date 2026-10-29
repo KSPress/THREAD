@@ -1,6 +1,6 @@
 // Storage adapters. Every adapter speaks vault-relative POSIX paths and stores
 // literal files: .md Threads, PDFs, images and the hidden `.thread/` metadata.
-import { idbDelete, idbEntries, idbGet, idbSet } from './idb'
+import { idbDelete, idbEntriesWithPrefix, idbGet, idbSet } from './idb'
 import { dirname, join } from './paths'
 
 export interface VaultEntry {
@@ -34,6 +34,12 @@ export const isDesktopApp = () => isTauri() && !isMobileOS()
 /* the offline cache for Satellites that have no file system access.   */
 /* ------------------------------------------------------------------ */
 
+interface IndexEntry {
+  dir: boolean
+  size: number
+  mtime: number
+}
+
 interface StoredFile {
   dir?: boolean
   text?: string
@@ -45,20 +51,33 @@ export class BrowserVault implements VaultAdapter {
   readonly kind = 'browser' as const
   constructor(readonly name = 'Browser Vault') {}
 
+  /** Names of the vaults kept in this browser/app, newest activity first. */
+  static async names(): Promise<string[]> {
+    const latest = new Map<string, number>()
+    for (const [k, v] of await idbEntriesWithPrefix<IndexEntry>('index', '')) {
+      const i = k.indexOf('::')
+      if (i <= 0) continue
+      const name = k.slice(0, i)
+      latest.set(name, Math.max(latest.get(name) ?? 0, v.mtime ?? 0))
+    }
+    return [...latest.entries()].sort((a, b) => b[1] - a[1]).map(([n]) => n)
+  }
+
   private key(path: string) {
     return `${this.name}::${path}`
+  }
+  private async put(path: string, value: StoredFile) {
+    await idbSet('files', this.key(path), value)
+    await idbSet('index', this.key(path), { dir: !!value.dir, size: value.text?.length ?? value.bin?.byteLength ?? 0, mtime: value.mtime } satisfies IndexEntry)
+  }
+  private async drop(path: string) {
+    await idbDelete('files', this.key(path))
+    await idbDelete('index', this.key(path))
   }
 
   async list(): Promise<VaultEntry[]> {
     const prefix = `${this.name}::`
-    const out: VaultEntry[] = []
-    for (const [k, v] of await idbEntries<StoredFile>('files')) {
-      const key = String(k)
-      if (!key.startsWith(prefix)) continue
-      const size = v.text?.length ?? v.bin?.byteLength ?? 0
-      out.push({ path: key.slice(prefix.length), dir: !!v.dir, size, mtime: v.mtime })
-    }
-    return out
+    return (await idbEntriesWithPrefix<IndexEntry>('index', prefix)).map(([k, v]) => ({ path: k.slice(prefix.length), dir: !!v.dir, size: v.size, mtime: v.mtime }))
   }
   async readText(path: string) {
     const f = await idbGet<StoredFile>('files', this.key(path))
@@ -67,7 +86,7 @@ export class BrowserVault implements VaultAdapter {
   }
   async writeText(path: string, text: string) {
     await this.ensureParents(path)
-    await idbSet('files', this.key(path), { text, mtime: Date.now() } satisfies StoredFile)
+    await this.put(path, { text, mtime: Date.now() })
   }
   async readBinary(path: string) {
     const f = await idbGet<StoredFile>('files', this.key(path))
@@ -76,12 +95,11 @@ export class BrowserVault implements VaultAdapter {
   }
   async writeBinary(path: string, bin: Uint8Array) {
     await this.ensureParents(path)
-    await idbSet('files', this.key(path), { bin, mtime: Date.now() } satisfies StoredFile)
+    await this.put(path, { bin, mtime: Date.now() })
   }
   async remove(path: string) {
-    const entries = await this.list()
-    for (const e of entries) {
-      if (e.path === path || e.path.startsWith(path + '/')) await idbDelete('files', this.key(e.path))
+    for (const e of await this.list()) {
+      if (e.path === path || e.path.startsWith(path + '/')) await this.drop(e.path)
     }
   }
   async rename(from: string, to: string) {
@@ -89,27 +107,27 @@ export class BrowserVault implements VaultAdapter {
     for (const e of await this.list()) {
       if (e.path === from || e.path.startsWith(from + '/')) {
         const v = await idbGet<StoredFile>('files', this.key(e.path))
-        await idbSet('files', this.key(to + e.path.slice(from.length)), v)
-        await idbDelete('files', this.key(e.path))
+        if (v) await this.put(to + e.path.slice(from.length), v)
+        await this.drop(e.path)
       }
     }
   }
   async mkdir(path: string) {
     if (!path) return
     await this.ensureParents(path)
-    if (!(await idbGet('files', this.key(path)))) await idbSet('files', this.key(path), { dir: true, mtime: Date.now() })
+    if (!(await idbGet('index', this.key(path)))) await this.put(path, { dir: true, mtime: Date.now() })
   }
   async exists(path: string) {
-    return !!(await idbGet('files', this.key(path)))
+    return !!(await idbGet('index', this.key(path)))
   }
   private async ensureParents(path: string) {
     let dir = dirname(path)
     const missing: string[] = []
-    while (dir && !(await idbGet('files', this.key(dir)))) {
+    while (dir && !(await idbGet('index', this.key(dir)))) {
       missing.push(dir)
       dir = dirname(dir)
     }
-    for (const d of missing) await idbSet('files', this.key(d), { dir: true, mtime: Date.now() })
+    for (const d of missing) await this.put(d, { dir: true, mtime: Date.now() })
   }
 }
 

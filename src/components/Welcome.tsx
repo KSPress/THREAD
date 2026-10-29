@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { lastVault, openAdapter, pickFolder, reopenFolder } from '../core/boot'
 import { useSettings } from '../core/settings'
 import { BrowserVault, FolderVault, isDesktopApp } from '../core/vault'
@@ -12,6 +12,23 @@ export function Welcome() {
   const [token, setToken] = useState(useSettings.getState().loomToken)
   const canPick = isDesktopApp() || FolderVault.supported()
   const last = lastVault()
+  // Vaults already kept on this device (phones, tablets and browsers).
+  const [vaults, setVaults] = useState<string[]>([])
+  useEffect(() => {
+    void BrowserVault.names()
+      .then(setVaults)
+      .catch(() => setVaults([]))
+  }, [])
+
+  const newVault = async () => {
+    const taken = new Set(vaults.map((v) => v.toLowerCase()))
+    let suggestion = 'My Vault'
+    for (let i = 2; taken.has(suggestion.toLowerCase()); i++) suggestion = `My Vault ${i}`
+    const name = prompt('Name your new vault', suggestion)?.trim()
+    if (!name) return
+    if (taken.has(name.toLowerCase()) && !confirm(`A vault called “${name}” is already on this device. Open it?`)) return
+    await openAdapter(new BrowserVault(name))
+  }
 
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true)
@@ -53,12 +70,32 @@ export function Welcome() {
               </span>
             </button>
           )}
-          <button className="welcome__opt" disabled={busy || !canPick} onClick={() => void run(pickFolder)}>
+          <button className="welcome__opt" disabled={busy} onClick={() => void run(newVault)}>
+            <Icon name="plus" size={22} />
+            <span>
+              <b>Start a new vault</b>
+              <br />
+              <small>{canPick ? 'Kept inside THREAD on this device. To use a folder on disk instead, open one below.' : 'Kept inside THREAD on this device. Connect a Loom or Google Drive later to share it.'}</small>
+            </span>
+          </button>
+          {vaults.filter((v) => v !== 'Sample Vault').length > 0 && (
+            <div className="welcome__vaults">
+              <div className="label">[ On this device ]</div>
+              {vaults
+                .filter((v) => v !== 'Sample Vault')
+                .map((v) => (
+                  <button key={v} className="chip-btn" disabled={busy} onClick={() => void run(() => openAdapter(new BrowserVault(v)))}>
+                    <Icon name="vault" size={13} /> {v}
+                  </button>
+                ))}
+            </div>
+          )}
+                    <button className="welcome__opt" disabled={busy || !canPick} onClick={() => void run(pickFolder)}>
             <Icon name="folder" size={22} />
             <span>
               <b>Open a folder vault</b>
               <br />
-              <small>{canPick ? 'Use any folder of .md files — works side by side with Obsidian.' : 'Needs the desktop app or Chrome/Edge on a computer. On phones, Threads are kept inside THREAD — connect a Loom to share them.'}</small>
+              <small>{canPick ? 'Use any folder of .md files — works side by side with Obsidian.' : 'Needs the desktop app or Chrome/Edge on a computer.'}</small>
             </span>
           </button>
           <button

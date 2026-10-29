@@ -12,9 +12,28 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="THREAD" />
     <title>THREAD</title>
+    <!-- First paint already in the right theme: no light flash before dark, no
+         unstyled frame while the app loads. -->
+    <style>
+      html { background: #ece6cc; }
+      html[data-theme='dark'] { background: #161a17; }
+      #boot { position: fixed; inset: 0; display: grid; place-items: center; pointer-events: none; }
+      #boot i { width: 36px; height: 36px; border-radius: 50%; border: 3px solid currentColor; border-right-color: transparent; opacity: 0.35; animation: boot 0.9s linear infinite; color: #303830; }
+      html[data-theme='dark'] #boot i { color: #f4eed3; }
+      @keyframes boot { to { transform: rotate(360deg); } }
+    </style>
+    <script>
+      try {
+        var s = JSON.parse(localStorage.getItem('thread.settings.v1') || '{}')
+        var t = s.theme || 'light'
+        var dark = t === 'dark' || (t === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+        if (s.corners) document.documentElement.dataset.corners = s.corners
+      } catch (e) {}
+    </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div id="boot"><i></i></div></div>
     <script type="module" src="/src/loader.ts"></script>
   </body>
 </html>

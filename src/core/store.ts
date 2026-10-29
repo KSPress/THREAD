@@ -94,6 +94,8 @@ export interface Pane {
 export const MAX_PANES = 4
 
 interface State {
+  /** True until the previous vault has been reopened (or there is none): no Welcome flash. */
+  booting: boolean
   adapter: VaultAdapter | null
   loading: boolean
   files: Record<string, FileInfo>
@@ -178,6 +180,7 @@ export const isCompact = () => typeof window !== 'undefined' && (window.innerWid
 export const getSync = () => sync
 
 export const useStore = create<State & Actions>((set, get) => ({
+  booting: true,
   adapter: null,
   loading: false,
   files: {},

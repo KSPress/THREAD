@@ -1,0 +1,81 @@
+# Runs the Android app in an emulator and walks the first-run paths (new
+# vault, sample world, Loom), recording screenshots, whether the app is still
+# alive after each step, and the device log. Crashes show up in this job's log.
+name: Android smoke test
+
+on:
+  push:
+    branches: [main, 'claude/**']
+  workflow_dispatch:
+
+concurrency:
+  group: android-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-linux-android
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: android-smoke
+
+      - run: npm ci
+
+      - name: Locate the Android NDK
+        run: |
+          NDK="${ANDROID_NDK_LATEST_HOME:-}"
+          if [ -z "$NDK" ] || [ ! -d "$NDK" ]; then NDK=$(ls -d "$ANDROID_HOME"/ndk/* 2>/dev/null | sort -V | tail -1); fi
+          echo "NDK_HOME=$NDK" >> "$GITHUB_ENV"
+
+      - name: Generate the Android project
+        run: |
+          npx tauri android init --ci
+          npx tauri icon src-tauri/app-icon.png
+
+      # Debug build: the WebView can be driven over DevTools. The live updater
+      # points nowhere so the code under test is this commit's.
+      - name: Build debug APK (x86_64)
+        run: npx tauri android build --debug --apk --target x86_64
+        env:
+          THREAD_LIVE_URL: https://live.invalid/
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run in the emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: bash scripts/android-smoke.sh
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-smoke
+          path: smoke/

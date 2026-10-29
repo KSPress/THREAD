@@ -5557,3 +5557,29 @@ button.dye:hover {
   max-width: calc(var(--editor-w, 760px) + 120px);
   margin: 0 auto 8px;
 }
+
+/* While the last vault reopens: a still backdrop, then the app fades in. */
+.boot-splash {
+  position: fixed;
+  inset: 0;
+}
+.app {
+  animation: fade-in 260ms var(--ease);
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+.welcome__vaults {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: var(--r-lg);
+  background: var(--tile);
+}
+.welcome__vaults .label {
+  width: 100%;
+}

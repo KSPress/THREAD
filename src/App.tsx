@@ -25,6 +25,7 @@ const VIEWS: View[] = ['home', 'canvas', 'tapestry', 'compiler']
 export function App() {
   useApplyTheme()
   const adapter = useStore((s) => s.adapter)
+  const booting = useStore((s) => s.booting)
   const view = useStore((s) => s.view)
   const active = useStore((s) => s.active)
   const spoolOpen = useStore((s) => s.spoolOpen)
@@ -87,7 +88,7 @@ export function App() {
     return (
       <>
         <Backdrop />
-        <Welcome />
+        {booting ? <div className="boot-splash" aria-label="Opening your vault" /> : <Welcome />}
       </>
     )
   }
