@@ -1,0 +1,1 @@
+var e=`0 0 25 25`,t=[`stroke`,`solid`,`duotone`,`bulk`],n=`Lineicons Free 5.2`,r={viewBox:e,styles:t,source:n};export{r as default,n as source,t as styles,e as viewBox};

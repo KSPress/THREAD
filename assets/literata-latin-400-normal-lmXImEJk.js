@@ -1,0 +1,1 @@
+var e=new URL(`literata-latin-400-normal-CUhpYSl8.woff`,import.meta.url).href;export{e as default};

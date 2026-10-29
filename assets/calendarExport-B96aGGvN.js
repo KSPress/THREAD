@@ -1,0 +1,1 @@
+import{m as e}from"./store-lZUnIdQs.js";import{S as t,f as n,m as r,p as i}from"./main-Byo5t9xt.js";async function a(){let a=e.getState().adapter?.name??`THREAD`,o=r(i(),{name:`THREAD — ${a}`,link:n});await t(`${a} deadlines.ics`,o)}export{a as downloadICS};

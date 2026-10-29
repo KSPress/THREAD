@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#303830" />
+    <link rel="icon" type="image/svg+xml" href="./thread.svg" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="THREAD" />
+    <title>THREAD</title>
+    <!-- First paint already in the right theme: no light flash before dark, no
+         unstyled frame while the app loads. -->
+    <style>html{background:#ece6cc}html[data-theme=dark]{background:#161a17}#boot{pointer-events:none;place-items:center;display:grid;position:fixed;inset:0}#boot i{opacity:.35;color:#303830;border:3px solid;border-right-color:#0000;border-radius:50%;width:36px;height:36px;animation:.9s linear infinite boot}html[data-theme=dark] #boot i{color:#f4eed3}@keyframes boot{to{transform:rotate(360deg)}}</style>
+    <script>
+      try {
+        var s = JSON.parse(localStorage.getItem('thread.settings.v1') || '{}')
+        var t = s.theme || 'light'
+        var dark = t === 'dark' || (t === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+        if (s.corners) document.documentElement.dataset.corners = s.corners
+      } catch (e) {}
+    </script>
+    <script type="module" crossorigin src="./assets/index-CSxASi5q.js"></script>
+  </head>
+  <body>
+    <div id="root"><div id="boot"><i></i></div></div>
+  </body>
+</html>
