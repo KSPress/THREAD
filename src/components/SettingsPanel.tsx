@@ -59,6 +59,13 @@ export function SettingsPanel() {
   const detail = useStore((s) => s.loomDetail)
   const connectLoom = useStore((s) => s.connectLoom)
   const adapter = useStore((s) => s.adapter)
+  // Escape closes, like every other overlay.
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && set({ settingsOpen: false })
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open])
   if (!open) return null
 
   const close = () => set({ settingsOpen: false })

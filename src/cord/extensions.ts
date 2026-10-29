@@ -91,6 +91,9 @@ export const PageBreak = Node.create({
 
 const BLOCKS = ['paragraph', 'heading']
 
+/** Each Cord editor's default first-line indent (inches), kept current by the Cord view. */
+export const defaultFirstLine = new WeakMap<object, number>()
+
 export const ParagraphFormat = Extension.create({
   name: 'cordParagraph',
   addGlobalAttributes() {
@@ -139,10 +142,54 @@ export const ParagraphFormat = Extension.create({
     }
   },
   addKeyboardShortcuts() {
+    const ed = () => this.editor
+    const inList = () => ed().isActive('listItem') || ed().isActive('taskItem')
+    const block = () => {
+      const { $from } = ed().state.selection
+      const node = $from.parent
+      return BLOCKS.includes(node.type.name) ? node : null
+    }
+    // What the first line is indented by, whether set on the paragraph or by the document style.
+    const firstLineOf = (node: { type: { name: string }; attrs: Record<string, any> }) =>
+      node.attrs.firstLine ?? (node.type.name === 'paragraph' ? (defaultFirstLine.get(this.editor) ?? 0) : 0)
+    const atLineStart = () => {
+      const { selection } = ed().state
+      return selection.empty && selection.$from.parentOffset === 0
+    }
     return {
-      // Tab indents paragraphs (lists keep their own Tab handling).
-      Tab: () => (this.editor.isActive('listItem') ? false : this.editor.commands.changeIndent(0.5)),
-      'Shift-Tab': () => (this.editor.isActive('listItem') ? false : this.editor.commands.changeIndent(-0.5)),
+      // Word: Tab at the start of a paragraph indents its first line, then the whole
+      // paragraph; in the middle of text it types a tab; lists nest; tables move cells.
+      Tab: () => {
+        if (inList()) return false
+        if (ed().isActive('codeBlock')) return ed().commands.insertContent('\t')
+        const { $from, $to } = ed().state.selection
+        if (!$from.sameParent($to)) return ed().commands.changeIndent(0.5)
+        const node = block()
+        if (node && atLineStart()) return firstLineOf(node) > 0 ? ed().commands.changeIndent(0.5) : ed().commands.setFirstLine(0.5)
+        return ed().commands.insertContent('\t')
+      },
+      'Shift-Tab': () => {
+        if (inList()) return false
+        const node = block()
+        if (!node) return true
+        if ((node.attrs.indent ?? 0) > 0) return ed().commands.changeIndent(-0.5)
+        if (firstLineOf(node) > 0) return ed().commands.setFirstLine(0)
+        return true
+      },
+      // Backspace at the very start takes the indent away before joining paragraphs.
+      Backspace: () => {
+        if (inList() || !atLineStart()) return false
+        const node = block()
+        if (!node) return false
+        if ((node.attrs.indent ?? 0) > 0) return ed().commands.changeIndent(-0.5)
+        if (node.attrs.firstLine != null && node.attrs.firstLine > 0) return ed().commands.setFirstLine(0)
+        if (node.attrs.firstLine == null && firstLineOf(node) > 0 && ed().state.selection.$from.index(0) > 0) {
+          const prev = ed().state.doc.child(ed().state.selection.$from.index(0) - 1)
+          // A paragraph right after a heading shows no indent, so there is nothing to take away.
+          if (prev.type.name !== 'heading') return ed().commands.setFirstLine(0)
+        }
+        return false
+      },
     }
   },
 })

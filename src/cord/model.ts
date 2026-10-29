@@ -20,6 +20,8 @@ export interface CordFile {
   header: { left: string; center: string; right: string }
   footer: { left: string; center: string; right: string }
   numbering: { format: NumberFormat; start: number }
+  /** 2 = Word-like defaults (no automatic first-line indent). Older Cords are migrated on open. */
+  styleRev?: number
   differentFirst: boolean
   style: {
     font: string
@@ -66,7 +68,10 @@ export function newCord(title: string, meta: Frontmatter = {}): CordFile {
     footer: { left: '', center: '{page}', right: '' },
     numbering: { format: '1', start: 1 },
     differentFirst: true,
-    style: { font: 'Literata', size: 12, lineHeight: 1.5, firstLineIndent: 0.5, paragraphSpacing: 0 },
+    // Word's "Normal": no automatic indent, a little space after each paragraph.
+    // A manuscript look (indented first lines, no gaps) is one click away in Layout.
+    style: { font: 'Literata', size: 12, lineHeight: 1.15, firstLineIndent: 0, paragraphSpacing: 8 },
+    styleRev: 2,
     doc: {
       type: 'doc',
       content: [
@@ -96,9 +101,18 @@ export function parseCord(raw: string): CordFile {
     header: { ...base.header, ...(data.header ?? {}) },
     footer: { ...base.footer, ...(data.footer ?? {}) },
     numbering: { ...base.numbering, ...(data.numbering ?? {}) },
-    style: { ...base.style, ...(data.style ?? {}) },
+    style: migrateStyle({ ...base.style, ...(data.style ?? {}) }, data.styleRev),
+    styleRev: 2,
     doc: data.doc && data.doc.type === 'doc' ? data.doc : base.doc,
   }
+}
+
+/** Cords made before styleRev 2 started with an automatic 0.5in first-line indent
+ *  and no paragraph spacing; untouched ones move to the Word-like defaults. */
+function migrateStyle(style: CordFile['style'], rev?: number): CordFile['style'] {
+  if (rev && rev >= 2) return style
+  if (style.firstLineIndent === 0.5 && style.paragraphSpacing === 0 && style.lineHeight === 1.5) return { ...style, firstLineIndent: 0, paragraphSpacing: 8 }
+  return style
 }
 
 export const serializeCord = (c: CordFile) => JSON.stringify(c, null, 1) + '\n'

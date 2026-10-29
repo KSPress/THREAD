@@ -109,6 +109,7 @@ export function CanvasView() {
   if (!panes.length) {
     return (
       <div className="view">
+        {pickerOpen && <OpenBeside anchor={null} onClose={() => set({ pickerOpen: false })} />}
         <div className="canvas-scroll" onDragOver={onDragOver} onDragLeave={() => setDropAt(null)} onDrop={(e) => void onDrop(e)}>
           <div className={'editor-card glow' + (dropAt !== null ? ' is-drop' : '')} style={{ display: 'grid', placeItems: 'center', textAlign: 'center' }}>
             <div>
@@ -117,9 +118,14 @@ export function CanvasView() {
                 No Thread on the needle<span style={{ color: 'var(--accent)' }}>.</span>
               </h2>
               <p className="muted">Pick one from the Spool, drag Threads and PDFs here to open them side by side, or start fresh.</p>
-              <button className="btn btn--ink" onClick={() => void createThread('', 'Untitled').then(open)}>
-                <Icon name="plus" size={14} /> New Thread
-              </button>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+                <button className="btn btn--ink" onClick={() => void createThread('', 'Untitled').then(open)}>
+                  <Icon name="plus" size={14} /> New Thread
+                </button>
+                <button className="btn" onClick={() => set({ pickerOpen: true })}>
+                  <Icon name="desk" size={14} /> Open a PDF or Thread
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -441,7 +447,10 @@ function OpenBeside({ anchor, onClose }: { anchor: HTMLElement | null; onClose: 
   return createPortal(
     <>
       <div className="scrim-clear" onClick={onClose} />
-      <div className="pop open-beside" style={{ top: (r?.bottom ?? 60) + 8, right: Math.max(8, innerWidth - (r?.right ?? innerWidth - 8)) }}>
+      <div
+        className="pop open-beside"
+        style={r ? { top: r.bottom + 8, right: Math.max(8, innerWidth - r.right) } : { top: 80, left: '50%', transform: 'translateX(-50%)' }}
+      >
         <input className="input" autoFocus placeholder="Open beside…" value={q} onChange={(e) => setQ(e.target.value)} />
         {pdfs.length > 0 && <div className="label open-beside__label">PDFs</div>}
         {pdfs.map((f) => (

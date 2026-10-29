@@ -45,6 +45,8 @@ export function TapestryView() {
   const [ghosts, setGhosts] = useState(false)
   const [dye, setDye] = useState<string | null>(null)
   const [query, setQuery] = useState('')
+  // Small screens tuck the Dye filters behind a button so they don't cover the graph.
+  const [showFilters, setShowFilters] = useState(false)
   const [hover, setHover] = useState<string | null>(null)
   const [view, setView] = useState({ x: 0, y: 0, k: 1 })
   const [, setTick] = useState(0)
@@ -383,7 +385,10 @@ export function TapestryView() {
             />
           </div>
           <span className="spacer" />
-          <div className="hud-card" style={{ display: 'flex', flexWrap: 'wrap', gap: 5, maxWidth: 420, alignItems: 'center' }}>
+          <button className={'hud-card tapestry__filters-btn' + (showFilters ? ' is-on' : '')} onClick={() => setShowFilters(!showFilters)}>
+            <Icon name="dye" size={14} /> Filters{dye ? ' · 1' : ''}
+          </button>
+          <div className={'hud-card tapestry__filters' + (showFilters ? ' is-open' : '')} style={{ display: 'flex', flexWrap: 'wrap', gap: 5, maxWidth: 420, alignItems: 'center' }}>
             <button className={'chip-btn'} onClick={() => setGhosts(!ghosts)} style={ghosts ? { background: 'var(--cream)', color: 'var(--ink)' } : undefined}>
               Loose stitches
             </button>

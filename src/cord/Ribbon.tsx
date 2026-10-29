@@ -120,7 +120,6 @@ export function Ribbon({
 }) {
   const [tab, setTab] = useState<Tab>('home')
   const palette = useSettings((s) => s.palette)
-  const threads = useStore((s) => s.threads)
   const importFiles = useStore((s) => s.importFiles)
   const lastField = useRef<{ el: HTMLInputElement; apply: (v: string) => void } | null>(null)
   const colors = ['#1d1d1d', '#5f6559', '#c0392b', ...PALETTES[palette].colors]
@@ -615,11 +614,6 @@ export function Ribbon({
               <RB wide title="Markdown" onRun={() => onExport('md')}>
                 <Icon name="download" size={14} /> Markdown
               </RB>
-            </Group>
-            <Group label="Stitched">
-              <span className="muted" style={{ fontSize: 12, maxWidth: 240 }}>
-                {Object.keys(threads).length} Threads in this vault can be stitched in with [[ — they show up in this Cord’s backlinks.
-              </span>
             </Group>
           </>
         )}

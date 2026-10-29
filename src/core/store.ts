@@ -297,7 +297,7 @@ export const useStore = create<State & Actions>((set, get) => ({
   },
 
   setView(view) {
-    set(isCompact() ? { view, spoolOpen: false, stitchingOpen: false } : { view })
+    set(isCompact() ? { view, spoolOpen: false, stitchingOpen: false, pickerOpen: false } : { view, pickerOpen: false })
   },
 
   async saveThread(path, raw) {

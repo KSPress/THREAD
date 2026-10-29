@@ -10,7 +10,7 @@ import { useSettings } from '../core/settings'
 import { saveFile } from '../core/platform'
 import { kindOf, stem } from '../core/paths'
 import { StitchPicker } from '../editor/commands'
-import { cordExtensions, pagesKey, spacerDecorations } from './extensions'
+import { cordExtensions, defaultFirstLine, pagesKey, spacerDecorations } from './extensions'
 import { computeLayout, layoutSignature, PAGE_GAP, pageBox, type Layout } from './layout'
 import { cordToMarkdown, fillTokens, fontStack, parseCord, serializeCord, type CordFile } from './model'
 import { Ribbon, type ExportKind } from './Ribbon'
@@ -135,6 +135,11 @@ export default function CordView({ path }: { path: string }) {
     },
     [markDirty],
   )
+
+  // Tab/Backspace need the document's default first-line indent.
+  useEffect(() => {
+    if (editor) defaultFirstLine.set(editor, cord.style.firstLineIndent)
+  }, [editor, cord.style.firstLineIndent])
 
   // Page setup / style changes move every block: lay out again once they render.
   useLayoutEffect(() => {

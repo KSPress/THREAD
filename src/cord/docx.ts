@@ -10,7 +10,7 @@ const docxFont = (id: string) => FONT_FALLBACK[id] ?? id
 
 export async function cordToDocx(cord: CordFile, name: string): Promise<Uint8Array> {
   const d = await import('docx')
-  const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, Footer, Header, PageNumber, Table, TableRow, TableCell, WidthType, FootnoteReferenceRun, TabStopType } = d
+  const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, Footer, Header, PageNumber, Table, TableRow, TableCell, WidthType, FootnoteReferenceRun, TabStopType, Tab } = d
   type Block = InstanceType<typeof Paragraph> | InstanceType<typeof Table>
   type Run = InstanceType<typeof TextRun> | InstanceType<typeof FootnoteReferenceRun>
 
@@ -44,6 +44,12 @@ export async function cordToDocx(cord: CordFile, name: string): Promise<Uint8Arr
             if (m.attrs?.fontFamily) o.font = docxFont(String(m.attrs.fontFamily).split(',')[0].replace(/['"]/g, '').trim())
             if (m.attrs?.fontSize) o.size = Math.round(parseFloat(m.attrs.fontSize) * 2)
           }
+        }
+        // Tabs typed in the Cord become real Word tabs.
+        const parts = String(o.text).split('\t')
+        if (parts.length > 1) {
+          delete o.text
+          o.children = parts.flatMap((t, i) => (i ? [new Tab(), t] : [t])).filter((c) => c !== '')
         }
         out.push(new TextRun(o as any))
       } else if (n.type === 'hardBreak') out.push(new TextRun({ text: '', break: 1 }))

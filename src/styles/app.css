@@ -3319,9 +3319,6 @@ button.dye:hover {
   .backdrop-pick {
     grid-template-columns: repeat(3, 1fr);
   }
-  .tapestry__hud > .hud-card:nth-child(4) {
-    display: none;
-  }
 }
 
 /* Short landscape screens (phones on their side): slim side rail. */
@@ -4490,6 +4487,7 @@ button.dye:hover {
   margin-top: 0;
 }
 .cord-editor p {
+  tab-size: 4;
   margin: 0 0 var(--cord-pspace);
   text-indent: var(--cord-indent);
   min-height: 1em;
@@ -5127,4 +5125,131 @@ button.dye:hover {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Spool on touch screens: hold a row for its menu, hold and drag to move it. */
+.tree-row {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.spool__scroll.is-touch-dragging {
+  touch-action: none;
+}
+.spool-ghost {
+  position: fixed;
+  z-index: 120;
+  transform: translate(12px, -50%);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px;
+  border-radius: 10px;
+  background: var(--frame);
+  color: var(--cream);
+  font-size: 13px;
+  box-shadow: var(--shadow-pop);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* ================================================================ */
+/* Audit fixes                                                       */
+/* ================================================================ */
+.ctx {
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
+}
+/* Home: the big number fits its tile at every size. */
+.impact__stack > .tile--accent {
+  container-type: inline-size;
+  min-width: 0;
+}
+.impact__num {
+  font-size: min(64px, 30cqi);
+  white-space: nowrap;
+}
+.welcome__brand .label {
+  white-space: normal;
+  line-height: 1.6;
+}
+/* Crumbs: the current page's name always shows; parents give way first. */
+.crumbs {
+  overflow: hidden;
+}
+.crumbs button {
+  min-width: 0;
+  max-width: 14ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 1;
+}
+.crumbs b {
+  flex-shrink: 0;
+  max-width: 60vw;
+}
+.crumbs svg {
+  flex: none;
+}
+@media (max-width: 860px) {
+  /* Phones: just the page's own name (the Spool shows where it lives). */
+  .crumbs > span:not(.cord-badge) {
+    display: none !important;
+  }
+}
+/* Palette: names win over paths. */
+.palette__item small {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.palette__item span {
+  flex: 1 1 auto;
+}
+/* Ribbon: on wide screens groups wrap onto a second row instead of being cut off. */
+@media (min-width: 861px) {
+  .ribbon__body {
+    flex-wrap: wrap;
+    row-gap: 8px;
+    overflow-x: visible;
+  }
+}
+/* Tapestry filters: a button on small screens, always open on large ones. */
+.tapestry__filters-btn {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  color: var(--cream);
+  font-size: 12.5px;
+  padding: 8px 12px;
+}
+.tapestry__filters-btn.is-on {
+  background: var(--cream);
+  color: var(--ink);
+}
+@media (max-width: 860px), (max-height: 520px) {
+  .tapestry__filters-btn {
+    display: inline-flex;
+  }
+  .tapestry__filters:not(.is-open) {
+    display: none !important;
+  }
+}
+.toolbar-group select.input {
+  min-width: 0;
+  max-width: 42vw;
+  text-overflow: ellipsis;
+}
+@media (max-width: 480px) {
+  .topbar {
+    gap: 4px;
+  }
+  .topbar .crumbs {
+    min-width: 0;
+    flex-shrink: 1;
+  }
 }

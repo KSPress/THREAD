@@ -37,7 +37,7 @@ export function Welcome() {
           </h1>
           <p>
             A local-first workspace for worldbuilders and writers. Every <b>Thread</b> is a plain Markdown file you own — <b>Stitch</b> them together,
-            dye them, quote your research at the <b>Desk</b> and bind it all into a manuscript.
+            dye them, quote PDFs open <b>side by side</b> and bind it all into a manuscript.
           </p>
           <div className="spacer" />
           <div className="label">[ Core / Host · Plain .md · Yjs CRDT sync ]</div>
@@ -70,7 +70,7 @@ export function Welcome() {
             <span>
               <b>Explore the sample world</b>
               <br />
-              <small>“The Ashen Reach” — Threads, Stitches, a Table, a Pinboard and a PDF at the Desk.</small>
+              <small>“The Ashen Reach” — Threads, Stitches, a Table, a Pinboard, a Cord and a PDF to quote from.</small>
             </span>
           </button>
           {!loom ? (

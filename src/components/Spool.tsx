@@ -1,5 +1,5 @@
 // The Spool: floating left sidebar with the nested Project tree and Dyes.
-import { useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { folderNote, subThreadDir, useStore, type FileInfo, useDyeColor } from '../core/store'
 import { basename, dirname, extname, join } from '../core/paths'
@@ -111,8 +111,7 @@ export function Spool() {
     setDropping(false)
     const moving = e.dataTransfer.getData('text/thread-path')
     if (moving) {
-      const target = join(dir, basename(moving))
-      if (target !== moving && !target.startsWith(moving + '/')) await useStore.getState().renamePath(moving, target)
+      if (dirname(moving) !== dir && !dir.startsWith(moving + '/')) await useStore.getState().movePath(moving, dir)
       return
     }
     if (e.dataTransfer.files.length) {
@@ -120,6 +119,73 @@ export function Spool() {
       useStore.getState().notify(`Spooled ${paths.length} file${paths.length === 1 ? '' : 's'} into ${dir || 'the vault'}`)
     }
   }
+
+  // Touch drag: the lifted row follows the finger; rows under it show where it will land.
+  const rows = useRef(new Map<string, { node: TreeNode; siblings: TreeNode[] }>()).current
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const [touchDrag, setTouchDrag] = useState<{ node: TreeNode; x: number; y: number } | null>(null)
+  const [touchOver, setTouchOver] = useState<{ path: string; pos: DropPos } | null>(null)
+  const dragRef = useRef<{ node: TreeNode; over: { path: string; pos: DropPos } | 'root' | null } | null>(null)
+  const touch = useMemo<TouchControl>(
+    () => ({
+      arm(node, x, y) {
+        dragRef.current = { node, over: null }
+        setTouchDrag({ node, x, y })
+      },
+      move(x, y) {
+        const d = dragRef.current
+        if (!d) return
+        setTouchDrag({ node: d.node, x, y })
+        // Scroll the Spool when the finger nears its edges.
+        const sc = scrollRef.current
+        if (sc) {
+          const r = sc.getBoundingClientRect()
+          if (y < r.top + 40) sc.scrollTop -= 12
+          else if (y > r.bottom - 40) sc.scrollTop += 12
+        }
+        const el = document.elementFromPoint(x, y) as HTMLElement | null
+        const row = el?.closest<HTMLElement>('.tree-row[data-path]')
+        let over: { path: string; pos: DropPos } | 'root' | null = null
+        if (row && row.dataset.path !== d.node.path && !row.dataset.path!.startsWith(d.node.path + '/')) {
+          const r = row.getBoundingClientRect()
+          const t = (y - r.top) / r.height
+          const nestable = row.dataset.nestable !== undefined
+          const pos: DropPos = !nestable ? (t < 0.5 ? 'before' : 'after') : t < 0.28 ? 'before' : t > 0.72 ? 'after' : 'inside'
+          over = { path: row.dataset.path!, pos }
+        } else if (!row && el?.closest('.spool__scroll')) over = 'root'
+        d.over = over
+        setTouchOver(over && over !== 'root' ? over : null)
+        setDropping(over === 'root')
+      },
+      drop() {
+        const d = dragRef.current
+        dragRef.current = null
+        setTouchDrag(null)
+        setTouchOver(null)
+        setDropping(false)
+        if (!d?.over) return
+        if (d.over === 'root') {
+          void useStore.getState().movePath(d.node.path, '')
+          return
+        }
+        const target = rows.get(d.over.path)
+        if (target) void onPlace(d.node.path, target.node, d.over.pos, target.siblings)
+      },
+      menu(node, x, y) {
+        dragRef.current = null
+        setTouchDrag(null)
+        setTouchOver(null)
+        setCtx({ x, y, node })
+      },
+      cancel() {
+        dragRef.current = null
+        setTouchDrag(null)
+        setTouchOver(null)
+        setDropping(false)
+      },
+    }),
+    [],
+  )
 
   const treeProps: TreeProps = {
     openMap,
@@ -130,6 +196,9 @@ export function Spool() {
     onDrop: (e, dir) => void onDrop(e, dir),
     onPlace: (m, t, p, sib) => void onPlace(m, t, p, sib),
     onAdd: (n) => void onAdd(n),
+    touch,
+    touchOver,
+    rows,
   }
 
   return (
@@ -161,7 +230,8 @@ export function Spool() {
         </div>
 
         <div
-          className={'spool__scroll' + (dropping ? ' spool__drop' : '')}
+          ref={scrollRef}
+          className={'spool__scroll' + (dropping ? ' spool__drop' : '') + (touchDrag ? ' is-touch-dragging' : '')}
           onDragOver={(e) => {
             e.preventDefault()
             setDropping(true)
@@ -259,6 +329,13 @@ export function Spool() {
           onDye={(p, rect) => setDyePop({ path: p, rect })}
         />
       )}
+      {touchDrag &&
+        createPortal(
+          <div className="spool-ghost" style={{ left: touchDrag.x, top: touchDrag.y }}>
+            <Icon name={touchDrag.node.file.kind === 'folder' ? 'folder' : 'file'} size={14} /> {touchDrag.node.name}
+          </div>,
+          document.body,
+        )}
       {stylePop && <ThreadStylePop path={stylePop.path} anchor={stylePop.rect} onClose={() => setStylePop(null)} />}
       {dyePop && <DyePicker path={dyePop.path} anchor={dyePop.rect} onClose={() => setDyePop(null)} />}
       {dyeEdit && <DyeEditor dye={dyeEdit.dye} anchor={dyeEdit.rect} onClose={() => setDyeEdit(null)} />}
@@ -277,6 +354,19 @@ interface TreeProps {
   onDrop: (e: DragEvent, dir: string) => void
   onPlace: (moving: string, target: TreeNode, pos: DropPos, siblings: TreeNode[]) => void
   onAdd: (node: TreeNode) => void
+  /** Long-press menus and finger dragging (touch screens have no right-click or HTML drag). */
+  touch: TouchControl
+  touchOver: { path: string; pos: DropPos } | null
+  /** Rows register themselves so a touch drop can find its target. */
+  rows: Map<string, { node: TreeNode; siblings: TreeNode[] }>
+}
+
+interface TouchControl {
+  arm(node: TreeNode, x: number, y: number): void
+  move(x: number, y: number): void
+  drop(): void
+  menu(node: TreeNode, x: number, y: number): void
+  cancel(): void
 }
 
 /** The folder a node's children live in: a Project's own folder, or a Thread's sub-thread folder. */
@@ -325,7 +415,69 @@ function Row({
   onDrop,
   onPlace,
   onAdd,
+  touch,
+  touchOver,
+  rows,
 }: TreeProps & { node: TreeNode; siblings: TreeNode[]; depth: number; open: boolean; onToggle: () => void }) {
+  rows.set(node.path, { node, siblings })
+  const rowRef = useRef<HTMLDivElement>(null)
+  const nodeRef = useRef(node)
+  nodeRef.current = node
+  // Touch: hold to lift the row, then drag it (or let go for its menu).
+  useEffect(() => {
+    const el = rowRef.current
+    if (!el) return
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let start = { x: 0, y: 0 }
+    let armed = false
+    let moved = false
+    const onStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return
+      const t = e.touches[0]
+      start = { x: t.clientX, y: t.clientY }
+      armed = moved = false
+      timer = setTimeout(() => {
+        armed = true
+        navigator.vibrate?.(8)
+        touch.arm(nodeRef.current, start.x, start.y)
+      }, 420)
+    }
+    const onMove = (e: TouchEvent) => {
+      const t = e.touches[0]
+      if (!armed) {
+        if (Math.hypot(t.clientX - start.x, t.clientY - start.y) > 10) clearTimeout(timer)
+        return
+      }
+      e.preventDefault()
+      if (!moved && Math.hypot(t.clientX - start.x, t.clientY - start.y) < 8) return
+      moved = true
+      touch.move(t.clientX, t.clientY)
+    }
+    const onEnd = (e: TouchEvent) => {
+      clearTimeout(timer)
+      if (!armed) return
+      e.preventDefault()
+      armed = false
+      if (moved) touch.drop()
+      else touch.menu(nodeRef.current, start.x, start.y)
+    }
+    const onCancel = () => {
+      clearTimeout(timer)
+      if (armed) touch.cancel()
+      armed = false
+    }
+    el.addEventListener('touchstart', onStart, { passive: true })
+    el.addEventListener('touchmove', onMove, { passive: false })
+    el.addEventListener('touchend', onEnd)
+    el.addEventListener('touchcancel', onCancel)
+    return () => {
+      clearTimeout(timer)
+      el.removeEventListener('touchstart', onStart)
+      el.removeEventListener('touchmove', onMove)
+      el.removeEventListener('touchend', onEnd)
+      el.removeEventListener('touchcancel', onCancel)
+    }
+  }, [touch])
   const active = useStore((s) => s.active)
   const panes = useStore((s) => s.panes)
   const threads = useStore((s) => s.threads)
@@ -339,7 +491,8 @@ function Row({
   const inPane = !isActive && panes.some((p) => p.path === node.path || (!!note && p.path === note))
   const thread = threads[node.path]
   const inputRef = useRef<HTMLInputElement>(null)
-  const [drop, setDrop] = useState<DropPos | null>(null)
+  const [dragDrop, setDrop] = useState<DropPos | null>(null)
+  const drop = dragDrop ?? (touchOver?.path === node.path ? touchOver.pos : null)
 
   useEffect(() => {
     if (renaming === node.path) inputRef.current?.select()
@@ -380,6 +533,9 @@ function Row({
         (open ? ' is-open' : '') +
         (drop ? ` drop-${drop}` : '')
       }
+      ref={rowRef}
+      data-path={node.path}
+      data-nestable={nestable ? '' : undefined}
       style={{ ['--depth' as any]: depth }}
       role="treeitem"
       aria-expanded={nestable ? open : undefined}
@@ -395,11 +551,11 @@ function Row({
         e.preventDefault()
         e.stopPropagation()
         const pos = moving ? where(e) : 'inside'
-        if (pos !== drop) setDrop(pos)
+        if (pos !== dragDrop) setDrop(pos)
       }}
       onDragLeave={() => setDrop(null)}
       onDrop={(e) => {
-        const pos = drop ?? 'inside'
+        const pos = dragDrop ?? 'inside'
         setDrop(null)
         const moving = e.dataTransfer.getData('text/thread-path')
         if (!moving) {
@@ -524,17 +680,29 @@ function ContextMenu({
   const openDesk = useStore((s) => s.openDesk)
   useEffect(() => {
     const close = () => onClose()
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     window.addEventListener('click', close)
     window.addEventListener('blur', close)
+    window.addEventListener('keydown', onKey)
     return () => {
       window.removeEventListener('click', close)
       window.removeEventListener('blur', close)
+      window.removeEventListener('keydown', onKey)
     }
   }, [onClose])
   const dir = !node ? '' : node.file.kind === 'folder' ? node.path : dirname(node.path)
   // Portaled: the Spool's backdrop-filter (and clipped corners) would trap a fixed menu inside it.
+  // Keep the whole menu on screen (it is taller than it used to be, and phones are short).
+  const menuRef = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState({ left: x, top: y })
+  useLayoutEffect(() => {
+    const el = menuRef.current
+    if (!el) return
+    const { width, height } = el.getBoundingClientRect()
+    setPos({ left: Math.max(8, Math.min(x, innerWidth - width - 8)), top: Math.max(8, Math.min(y, innerHeight - height - 8)) })
+  }, [x, y])
   return createPortal(
-    <div className="ctx pop" style={{ left: Math.min(x, innerWidth - 210), top: Math.min(y, innerHeight - 240) }}>
+    <div ref={menuRef} className="ctx pop" style={pos}>
       <button onClick={() => onNewThread(dir)}>
         <Icon name="canvas" size={15} /> New Thread here
       </button>
