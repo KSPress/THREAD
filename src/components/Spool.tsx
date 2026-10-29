@@ -149,17 +149,14 @@ export function Spool() {
           <Icon name="search" size={15} /> Find a Thread… <kbd>Ctrl K</kbd>
         </button>
         <div className="spool__actions">
-          <button className="key" onClick={() => void newThread('')}>
-            <Icon name="canvas" size={16} />
-            New Thread
+          <button className="key" onClick={() => void newThread('')} title="New Thread" aria-label="New Thread">
+            <Icon name="canvas" size={16} />+ Thread
           </button>
-          <button className="key" onClick={() => void newCord('')} title="A Thread with a full word processor: pages, headers & footers, page numbers, footnotes">
-            <Icon name="compiler" size={16} />
-            New Cord
+          <button className="key" onClick={() => void newCord('')} title="New Cord: a Thread with a full word processor (pages, headers & footers, page numbers, footnotes)" aria-label="New Cord">
+            <Icon name="compiler" size={16} />+ Cord
           </button>
-          <button className="key" onClick={() => void newProject('')}>
-            <Icon name="folder" size={16} />
-            New Project
+          <button className="key" onClick={() => void newProject('')} title="New Project" aria-label="New Project">
+            <Icon name="folder" size={16} />+ Project
           </button>
         </div>
 

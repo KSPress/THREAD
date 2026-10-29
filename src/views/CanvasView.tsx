@@ -338,9 +338,6 @@ function ThreadPane({ path }: { path: string }) {
             <button className="chip-btn" onClick={(e) => setStylePop({ rect: e.currentTarget.getBoundingClientRect(), tab: 'color' })}>
               <Icon name="dye" size={12} /> Style
             </button>
-            <button className="chip-btn" onClick={(e) => setStylePop({ rect: e.currentTarget.getBoundingClientRect(), tab: 'background' })}>
-              <Icon name="layers" size={12} /> Background
-            </button>
             <button
               className="chip-btn"
               onClick={async () => {

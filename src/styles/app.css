@@ -1258,12 +1258,21 @@ button.dye:hover {
   color: var(--muted);
   text-decoration: line-through;
 }
+.thread-editor p.is-empty,
+.thread-editor h1.is-empty,
+.thread-editor h2.is-empty {
+  position: relative;
+}
+/* One line, never wrapping over the text below in a narrow pane. */
 .thread-editor p.is-empty::before,
 .thread-editor h1.is-empty::before,
 .thread-editor h2.is-empty::before {
   content: attr(data-placeholder);
-  float: left;
-  height: 0;
+  position: absolute;
+  inset: 0 0 auto 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--muted);
   opacity: 0.6;
   pointer-events: none;
@@ -4090,6 +4099,8 @@ button.dye:hover {
 }
 .thread-head__actions {
   display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
   gap: 4px;
   opacity: 0;
   transition: opacity var(--t-fast);
@@ -5067,4 +5078,53 @@ button.dye:hover {
   .pane__head {
     display: none;
   }
+}
+
+/* ================================================================ */
+/* Narrow panes (side by side, iPad, phones): the card scales down   */
+/* ================================================================ */
+.pane {
+  container: pane / inline-size;
+}
+.thread-head__actions .chip-btn {
+  white-space: nowrap;
+}
+.thread-editor h1 {
+  /* Long titles wrap between words instead of breaking inside one. */
+  overflow-wrap: normal;
+  word-break: normal;
+  text-wrap: balance;
+}
+.canvas-scroll {
+  overflow-x: hidden;
+}
+@container pane (max-width: 640px) {
+  .editor-card {
+    padding: 30px 26px 64px;
+  }
+  .thread-editor h1 {
+    font-size: clamp(1.7em, 11cqi, 2.6em);
+  }
+  .thread-head__icon {
+    width: 54px;
+    height: 54px;
+    border-radius: 15px;
+  }
+}
+@container pane (max-width: 380px) {
+  .editor-card {
+    padding: 22px 16px 56px;
+    border-radius: var(--r-lg);
+  }
+  .thread-editor h1 {
+    font-size: clamp(1.5em, 10.5cqi, 2.2em);
+  }
+}
+/* Spool keys: one line each, the same height. */
+.spool__actions .key {
+  white-space: nowrap;
+  font-size: 12.5px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
