@@ -200,6 +200,16 @@ export function cordToMarkdown(doc: JSONContent): string {
         return '---'
       case 'pageBreak':
         return '<!-- page break -->'
+      case 'cordToc': {
+        // Contents as a list of the Cord's headings.
+        const heads: string[] = []
+        const walk = (x: JSONContent) => {
+          if (x.type === 'heading') heads.push(`${'  '.repeat(Math.max(0, (x.attrs?.level ?? 1) - 1))}- ${inline(x.content)}`)
+          else x.content?.forEach(walk)
+        }
+        walk(doc)
+        return heads.length ? '**Contents**\n\n' + heads.join('\n') : ''
+      }
       case 'bulletList':
       case 'orderedList':
         return (n.content ?? [])

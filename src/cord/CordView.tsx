@@ -2,7 +2,7 @@
 // stack of page sheets; the pagination pass pushes blocks onto the page they
 // fit on and reserves room at each page's foot for its footnotes. Headers,
 // footers and page numbers are drawn on the sheets.
-import { EditorContent, useEditor, type Editor } from '@tiptap/react'
+import { EditorContent, useEditor, useEditorState, type Editor } from '@tiptap/react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { editorBus, editors, useStore } from '../core/store'
 import { dropQuote, quoteContent } from '../editor/quoteDrop'
@@ -10,9 +10,11 @@ import { useSettings } from '../core/settings'
 import { saveFile } from '../core/platform'
 import { kindOf, stem } from '../core/paths'
 import { StitchPicker } from '../editor/commands'
-import { cordExtensions, defaultFirstLine, pagesKey, spacerDecorations } from './extensions'
+import { baseFontSize, cordExtensions, defaultFirstLine, pageOf, pagesKey, spacerDecorations, TOC_EVENT } from './extensions'
+import { FindBar } from '../editor/FindBar'
+import { Icon } from '../components/Icon'
 import { computeLayout, layoutSignature, PAGE_GAP, pageBox, type Layout } from './layout'
-import { cordToMarkdown, fillTokens, fontStack, parseCord, serializeCord, type CordFile } from './model'
+import { cordToMarkdown, fillTokens, fontStack, formatNumber, parseCord, serializeCord, type CordFile } from './model'
 import { Ribbon, type ExportKind } from './Ribbon'
 import { onBeforeReload } from '../core/update'
 
@@ -44,7 +46,12 @@ export default function CordView({ path }: { path: string }) {
   const [layout, setLayout] = useState<Layout | null>(null)
   const sig = useRef('')
   const box = pageBox(cord)
-  const [zoom, setZoom] = useState(1)
+  const [zoom, setZoomRaw] = useState(1)
+  const setZoom = (z: number) => {
+    if (z > 0) return setZoomRaw(z)
+    const w = scroller.current?.clientWidth ?? 0
+    if (w) setZoomRaw(Math.max(0.4, Math.min(2, Math.floor(((w - 24) / pageBox(cordRef.current).w) * 100) / 100)))
+  }
 
   const markDirty = useCallback(() => {
     dirtyCords.set(path, () => ({ ...cordRef.current, doc: editorRef.current?.getJSON() ?? cordRef.current.doc }))
@@ -56,6 +63,11 @@ export default function CordView({ path }: { path: string }) {
     const ed = editorRef.current
     if (!ed || ed.isDestroyed || !mounted(ed)) return
     const l = computeLayout(ed.view, cordRef.current, measurer.current, PAGE_GAP)
+    // Live table of contents: the page each position lands on, as numbered.
+    const breaks = l.spacers.map((x) => x.pos)
+    const { start, format } = cordRef.current.numbering
+    pageOf.set(ed, (pos) => formatNumber(breaks.filter((b) => b <= pos).length + start, format))
+    window.dispatchEvent(new Event(TOC_EVENT))
     const s = layoutSignature(l) + '|' + l.pages.map((p) => p.notes.map((n) => n.id + n.text).join()).join('/')
     if (s === sig.current) return
     sig.current = s
@@ -136,10 +148,24 @@ export default function CordView({ path }: { path: string }) {
     [markDirty],
   )
 
-  // Tab/Backspace need the document's default first-line indent.
+  // Tab/Backspace need the document's default first-line indent; font grow/shrink its size.
   useEffect(() => {
-    if (editor) defaultFirstLine.set(editor, cord.style.firstLineIndent)
-  }, [editor, cord.style.firstLineIndent])
+    if (!editor) return
+    defaultFirstLine.set(editor, cord.style.firstLineIndent)
+    baseFontSize.set(editor, cord.style.size)
+  }, [editor, cord.style.firstLineIndent, cord.style.size])
+
+  // Find & Replace (Ctrl+F / Ctrl+H), and the page you're on for the status bar.
+  const [find, setFind] = useState<null | 'find' | 'replace'>(null)
+  const [onPage, setOnPage] = useState(1)
+  const onKeyDownCapture = (e: React.KeyboardEvent) => {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey) return
+    const k = e.key.toLowerCase()
+    if (k === 'f' || k === 'h') {
+      e.preventDefault()
+      setFind(k === 'h' ? 'replace' : 'find')
+    }
+  }
 
   // Page setup / style changes move every block: lay out again once they render.
   useLayoutEffect(() => {
@@ -296,9 +322,26 @@ export default function CordView({ path }: { path: string }) {
 
   if (!editor) return null
   return (
-    <div className="cord">
-      <Ribbon editor={editor} cord={cord} update={update} pages={pages.length} onExport={(k) => void doExport(k)} zoom={zoom} setZoom={setZoom} />
-      <div className="cord-scroll" ref={scroller}>
+    <div className="cord" onKeyDownCapture={onKeyDownCapture}>
+      <Ribbon
+        editor={editor}
+        cord={cord}
+        update={update}
+        pages={pages.length}
+        onExport={(k) => void doExport(k)}
+        zoom={zoom}
+        setZoom={setZoom}
+        onFind={(mode) => setFind(mode)}
+      />
+      {find && <FindBar editor={editor} replace={find === 'replace'} onClose={() => setFind(null)} />}
+      <div
+        className="cord-scroll"
+        ref={scroller}
+        onScroll={(e) => {
+          const el = e.currentTarget
+          setOnPage(Math.min(pages.length, Math.floor((el.scrollTop + el.clientHeight / 3) / ((box.h + PAGE_GAP) * zoom)) + 1))
+        }}
+      >
         <div className="cord-zoom" style={{ width: box.w * zoom, height: totalH * zoom }}>
           <div className="cord-stage" style={{ width: box.w, height: totalH, transform: `scale(${zoom})`, ...cssVars }}>
             {pages.map((p, i) => (
@@ -333,6 +376,41 @@ export default function CordView({ path }: { path: string }) {
           </div>
         </div>
       </div>
+      <StatusBar editor={editor} page={onPage} pages={pages.length} zoom={zoom} setZoom={setZoom} />
+    </div>
+  )
+}
+
+/** Word's status bar: where you are, how much you've written, and zoom. */
+function StatusBar({ editor, page, pages, zoom, setZoom }: { editor: Editor; page: number; pages: number; zoom: number; setZoom: (z: number) => void }) {
+  const words = useEditorState({
+    editor,
+    selector: ({ editor: e }) => {
+      const { from, to, empty } = e.state.selection
+      const count = (t: string) => (t.match(/[\p{L}\p{N}'’]+/gu) ?? []).length
+      return { total: count(e.state.doc.textContent), selected: empty ? 0 : count(e.state.doc.textBetween(from, to, ' ')) }
+    },
+  })
+  return (
+    <div className="cord-status">
+      <span>
+        Page {page} of {pages}
+      </span>
+      <span>{words.selected ? `${words.selected.toLocaleString()} of ${words.total.toLocaleString()} words` : `${words.total.toLocaleString()} words`}</span>
+      <span className="spacer" />
+      <button className="icon-btn" title="Fit page width" onClick={() => setZoom(-1)}>
+        <Icon name="layers" size={13} />
+      </button>
+      <input
+        type="range"
+        min={40}
+        max={200}
+        step={5}
+        value={Math.round(zoom * 100)}
+        aria-label="Zoom"
+        onChange={(e) => setZoom(Number(e.target.value) / 100)}
+      />
+      <span className="mono">{Math.round(zoom * 100)}%</span>
     </div>
   )
 }

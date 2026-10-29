@@ -13,6 +13,7 @@ import StarterKit from '@tiptap/starter-kit'
 import { Stitch } from '../editor/Stitch'
 import { VaultImage } from '../editor/VaultImage'
 import { uid } from '../core/table'
+import { FindReplace } from '../editor/find'
 
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
@@ -250,6 +251,146 @@ export function cordExtensions(): Extensions {
     PageBreak,
     ParagraphFormat,
     Pagination,
+    WordKeys,
+    TableOfContents,
+    FindReplace,
     Placeholder.configure({ placeholder: 'Start writing…' }),
   ]
 }
+
+/* ------------------------------------------------------------------ */
+/* Word's keyboard shortcuts                                           */
+/* ------------------------------------------------------------------ */
+
+export const FONT_STEPS = [8, 9, 10, 10.5, 11, 12, 13, 14, 16, 18, 20, 24, 28, 32, 36, 48, 60, 72]
+
+/** Each Cord editor's base font size (pt), so grow/shrink starts from what you see. */
+export const baseFontSize = new WeakMap<object, number>()
+
+export const WordKeys = Extension.create({
+  name: 'cordWordKeys',
+  addKeyboardShortcuts() {
+    const ed = () => this.editor
+    const sizeNow = () => {
+      const v = ed().getAttributes('textStyle').fontSize as string | undefined
+      return v ? parseFloat(v) : (baseFontSize.get(ed()) ?? 12)
+    }
+    const step = (dir: 1 | -1, fine = false) => {
+      const cur = sizeNow()
+      const next = fine ? cur + dir : dir > 0 ? (FONT_STEPS.find((s) => s > cur) ?? cur + 12) : ([...FONT_STEPS].reverse().find((s) => s < cur) ?? Math.max(1, cur - 1))
+      return ed().chain().focus().setFontSize(`${next}pt`).run()
+    }
+    return {
+      // Alignment (Word: Ctrl+L / E / R / J).
+      'Mod-l': () => ed().commands.setTextAlign('left'),
+      'Mod-e': () => ed().commands.setTextAlign('center'),
+      'Mod-r': () => ed().commands.setTextAlign('right'),
+      'Mod-j': () => ed().commands.setTextAlign('justify'),
+      // Font size: Ctrl+Shift+> / < by step, Ctrl+] / [ by a point.
+      'Mod-Shift-.': () => step(1),
+      'Mod-Shift-,': () => step(-1),
+      'Mod-]': () => step(1, true),
+      'Mod-[': () => step(-1, true),
+      // Line spacing: Ctrl+1 single, Ctrl+5 one-and-a-half, Ctrl+2 double.
+      'Mod-1': () => ed().commands.setLineHeight(1),
+      'Mod-5': () => ed().commands.setLineHeight(1.5),
+      'Mod-2': () => ed().commands.setLineHeight(2),
+      // Normal style.
+      'Mod-Shift-n': () => ed().chain().focus().setParagraph().run(),
+      // Hyperlink.
+      'Mod-k': () => {
+        const url = prompt('Link to', ed().getAttributes('link').href ?? 'https://')
+        if (url === null) return true
+        if (!url) return ed().chain().focus().unsetLink().run()
+        return ed().chain().focus().extendMarkRange('link').setLink({ href: url }).run()
+      },
+    }
+  },
+})
+
+/* ------------------------------------------------------------------ */
+/* Table of contents: a live list of the Cord's headings with the page */
+/* each one lands on (refreshed after every layout pass).              */
+/* ------------------------------------------------------------------ */
+
+/** Each Cord editor's "which page is this position on" (1-based, as numbered). */
+export const pageOf = new WeakMap<object, (pos: number) => string>()
+export const TOC_EVENT = 'cord-layout'
+
+declare module '@tiptap/core' {
+  interface Commands<ReturnType> {
+    cordToc: { insertToc: () => ReturnType }
+  }
+}
+
+export const TableOfContents = Node.create({
+  name: 'cordToc',
+  group: 'block',
+  atom: true,
+  selectable: true,
+  draggable: true,
+  parseHTML() {
+    return [{ tag: 'div[data-cord-toc]' }]
+  },
+  renderHTML() {
+    return ['div', { 'data-cord-toc': '', class: 'cord-toc' }]
+  },
+  addCommands() {
+    return {
+      insertToc:
+        () =>
+        ({ chain }) =>
+          chain().insertContent([{ type: this.name }, { type: 'paragraph' }]).run(),
+    }
+  },
+  addNodeView() {
+    return ({ editor }) => {
+      const dom = document.createElement('div')
+      dom.className = 'cord-toc'
+      dom.contentEditable = 'false'
+      const render = () => {
+        const find = pageOf.get(editor)
+        const items: { level: number; text: string; pos: number }[] = []
+        editor.state.doc.descendants((n, pos) => {
+          if (n.type.name === 'heading' && n.textContent.trim()) items.push({ level: n.attrs.level, text: n.textContent, pos })
+          return n.type.name !== 'heading'
+        })
+        dom.replaceChildren()
+        const title = document.createElement('div')
+        title.className = 'cord-toc__title'
+        title.textContent = 'Contents'
+        dom.append(title)
+        if (!items.length) {
+          const empty = document.createElement('div')
+          empty.className = 'cord-toc__empty'
+          empty.textContent = 'Add headings (Home → Style) and they appear here with their page numbers.'
+          dom.append(empty)
+        }
+        for (const it of items) {
+          const row = document.createElement('a')
+          row.className = `cord-toc__row cord-toc__row--${it.level}`
+          const label = document.createElement('span')
+          label.textContent = it.text
+          const dots = document.createElement('i')
+          const page = document.createElement('b')
+          page.textContent = find ? find(it.pos) : ''
+          row.append(label, dots, page)
+          row.addEventListener('mousedown', (e) => {
+            e.preventDefault()
+            editor.chain().focus().setTextSelection(it.pos + 1).scrollIntoView().run()
+          })
+          dom.append(row)
+        }
+      }
+      render()
+      const onLayout = () => render()
+      window.addEventListener(TOC_EVENT, onLayout)
+      return {
+        dom,
+        update: (node) => node.type.name === 'cordToc',
+        destroy: () => window.removeEventListener(TOC_EVENT, onLayout),
+        ignoreMutation: () => true,
+      }
+    }
+  },
+})

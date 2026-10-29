@@ -109,6 +109,7 @@ export function Ribbon({
   onExport,
   zoom,
   setZoom,
+  onFind,
 }: {
   editor: Editor
   cord: CordFile
@@ -117,6 +118,7 @@ export function Ribbon({
   onExport: (k: ExportKind) => void
   zoom: number
   setZoom: (z: number) => void
+  onFind: (mode: 'find' | 'replace') => void
 }) {
   const [tab, setTab] = useState<Tab>('home')
   const palette = useSettings((s) => s.palette)
@@ -157,6 +159,8 @@ export function Ribbon({
         color: (ts.color as string) || undefined,
         lineHeight: (para.lineHeight as number | null) ?? null,
         firstLine: (para.firstLine as number | null) ?? null,
+        spaceBefore: (para.spaceBefore as number | null) ?? null,
+        spaceAfter: (para.spaceAfter as number | null) ?? null,
         style,
         canUndo: e.can().undo(),
         canRedo: e.can().redo(),
@@ -384,6 +388,52 @@ export function Ribbon({
                   </option>
                 ))}
               </select>
+              <select
+                className="rselect"
+                value={st.spaceBefore ?? ''}
+                onChange={(e) => c().setSpacing(e.target.value === '' ? null : Number(e.target.value), st.spaceAfter).run()}
+                aria-label="Space before paragraph"
+                title="Space before paragraph"
+              >
+                <option value="">⇡ auto</option>
+                {[0, 6, 12, 18, 24].map((v) => (
+                  <option key={v} value={v}>
+                    ⇡ {v} pt
+                  </option>
+                ))}
+              </select>
+              <select
+                className="rselect"
+                value={st.spaceAfter ?? ''}
+                onChange={(e) => c().setSpacing(st.spaceBefore, e.target.value === '' ? null : Number(e.target.value)).run()}
+                aria-label="Space after paragraph"
+                title="Space after paragraph"
+              >
+                <option value="">⇣ {cord.style.paragraphSpacing}</option>
+                {[0, 6, 8, 12, 18, 24].map((v) => (
+                  <option key={v} value={v}>
+                    ⇣ {v} pt
+                  </option>
+                ))}
+              </select>
+            </Group>
+            <Group label="Case">
+              <select className="rselect" value="" onChange={(e) => changeCase(editor, e.target.value as CaseMode)} aria-label="Change case" title="Change case">
+                <option value="">Aa</option>
+                <option value="sentence">Sentence case.</option>
+                <option value="lower">lowercase</option>
+                <option value="upper">UPPERCASE</option>
+                <option value="title">Capitalize Each Word</option>
+                <option value="toggle">tOGGLE cASE</option>
+              </select>
+            </Group>
+            <Group label="Editing">
+              <RB wide title="Find (Ctrl+F)" onRun={() => onFind('find')}>
+                <Icon name="search" size={14} /> Find
+              </RB>
+              <RB wide title="Replace (Ctrl+H)" onRun={() => onFind('replace')}>
+                ⇄ Replace
+              </RB>
             </Group>
           </>
         )}
@@ -444,6 +494,39 @@ export function Ribbon({
                 ◷ Date
               </RB>
             </Group>
+            <Group label="Links & contents">
+              <RB
+                wide
+                title="Link (Ctrl+K)"
+                onRun={() => {
+                  const url = prompt('Link to', editor.getAttributes('link').href ?? 'https://')
+                  if (url === null) return
+                  if (!url) c().unsetLink().run()
+                  else c().extendMarkRange('link').setLink({ href: url }).run()
+                }}
+              >
+                ↗ Link
+              </RB>
+              <RB wide title="Table of contents: your headings with their page numbers, kept up to date" onRun={() => c().insertToc().run()}>
+                ☰ Contents
+              </RB>
+            </Group>
+            <Group label="Symbol">
+              <select
+                className="rselect"
+                value=""
+                onChange={(e) => e.target.value && c().insertContent(e.target.value).run()}
+                aria-label="Insert symbol"
+                title="Insert symbol"
+              >
+                <option value="">Ω</option>
+                {SYMBOLS.map(([ch, name]) => (
+                  <option key={ch} value={ch}>
+                    {ch}  {name}
+                  </option>
+                ))}
+              </select>
+            </Group>
           </>
         )}
 
@@ -495,6 +578,24 @@ export function Ribbon({
                   />
                 </label>
               ))}
+            </Group>
+            <Group label="Preset">
+              <select
+                className="rselect rselect--wide"
+                value=""
+                onChange={(e) => {
+                  const p = STYLE_PRESETS.find((x) => x.id === e.target.value)
+                  if (p) update({ style: { ...cord.style, ...p.style } })
+                }}
+                aria-label="Document style preset"
+              >
+                <option value="">Apply a look…</option>
+                {STYLE_PRESETS.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
             </Group>
             <Group label="Document style">
               <select className="rselect rselect--wide" value={cord.style.font} onChange={(e) => update({ style: { ...cord.style, font: e.target.value } })} aria-label="Body font">
@@ -620,6 +721,83 @@ export function Ribbon({
       </div>
     </div>
   )
+}
+
+const SYMBOLS: [string, string][] = [
+  ['—', 'em dash'],
+  ['–', 'en dash'],
+  ['…', 'ellipsis'],
+  ['“', 'open quote'],
+  ['”', 'close quote'],
+  ['‘', 'open single quote'],
+  ['’', 'apostrophe'],
+  ['©', 'copyright'],
+  ['®', 'registered'],
+  ['™', 'trademark'],
+  ['§', 'section'],
+  ['¶', 'pilcrow'],
+  ['†', 'dagger'],
+  ['‡', 'double dagger'],
+  ['•', 'bullet'],
+  ['°', 'degree'],
+  ['±', 'plus-minus'],
+  ['×', 'times'],
+  ['÷', 'divide'],
+  ['≈', 'approximately'],
+  ['≠', 'not equal'],
+  ['→', 'right arrow'],
+  ['←', 'left arrow'],
+  ['½', 'one half'],
+  ['¼', 'one quarter'],
+  ['€', 'euro'],
+  ['£', 'pound'],
+  ['¥', 'yen'],
+  ['⁂', 'asterism'],
+  ['\u00a0', 'non-breaking space'],
+]
+
+const STYLE_PRESETS: { id: string; label: string; style: Partial<CordFile['style']> }[] = [
+  { id: 'normal', label: 'Normal (Word)', style: { lineHeight: 1.15, firstLineIndent: 0, paragraphSpacing: 8 } },
+  { id: 'manuscript', label: 'Manuscript (indented, double)', style: { font: 'Times New Roman', size: 12, lineHeight: 2, firstLineIndent: 0.5, paragraphSpacing: 0 } },
+  { id: 'double', label: 'Double-spaced essay', style: { lineHeight: 2, firstLineIndent: 0.5, paragraphSpacing: 0 } },
+  { id: 'book', label: 'Book (indented, compact)', style: { font: 'Garamond', size: 11, lineHeight: 1.35, firstLineIndent: 0.3, paragraphSpacing: 0 } },
+  { id: 'single', label: 'Single, no gaps', style: { lineHeight: 1, firstLineIndent: 0, paragraphSpacing: 0 } },
+]
+
+type CaseMode = 'sentence' | 'lower' | 'upper' | 'title' | 'toggle'
+
+/** Word's Change Case on the selection (or the word at the cursor). */
+function changeCase(editor: Editor, mode: CaseMode) {
+  if (!mode) return
+  let { from, to } = editor.state.selection
+  if (from === to) {
+    const $p = editor.state.selection.$from
+    const text = $p.parent.textContent
+    let a = $p.parentOffset
+    let b = a
+    while (a > 0 && /[\p{L}\p{N}'’]/u.test(text[a - 1])) a--
+    while (b < text.length && /[\p{L}\p{N}'’]/u.test(text[b])) b++
+    from = $p.start() + a
+    to = $p.start() + b
+  }
+  const tr = editor.state.tr
+  editor.state.doc.nodesBetween(from, to, (node, pos) => {
+    if (!node.isText) return true
+    const s = Math.max(from, pos)
+    const e = Math.min(to, pos + node.nodeSize)
+    const t = node.text!.slice(s - pos, e - pos)
+    const sentenceStart = s === from
+    let out = t
+    if (mode === 'lower') out = t.toLowerCase()
+    else if (mode === 'upper') out = t.toUpperCase()
+    else if (mode === 'title') out = t.toLowerCase().replace(/(^|[\s([{“"‘'-])(\p{L})/gu, (_, a, b) => a + b.toUpperCase())
+    else if (mode === 'toggle') out = [...t].map((ch) => (ch === ch.toUpperCase() ? ch.toLowerCase() : ch.toUpperCase())).join('')
+    else if (mode === 'sentence') out = t.toLowerCase().replace(/(^|[.!?]\s+)(\p{L})/gu, (m, a, b, i) => (i === 0 && !sentenceStart ? m : a + b.toUpperCase()))
+    if (out !== t) tr.insertText(out, tr.mapping.map(s), tr.mapping.map(e))
+    return false
+  })
+  if (tr.docChanged) editor.view.dispatch(tr)
+  editor.commands.focus()
 }
 
 function AlignGlyph({ a }: { a: 'left' | 'center' | 'right' | 'justify' }) {

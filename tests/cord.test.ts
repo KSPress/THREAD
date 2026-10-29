@@ -87,3 +87,32 @@ describe('cords', () => {
     expect(footers.some((x) => x.includes('PAGE'))).toBe(true)
   })
 })
+
+describe('find & replace', () => {
+  it('finds across marks, respects case and whole words, and replaces all in one step', async () => {
+    const { Editor } = await import('@tiptap/core')
+    const StarterKit = (await import('@tiptap/starter-kit')).default
+    const { FindReplace, findKey } = await import('../src/editor/find')
+    const editor = new Editor({ extensions: [StarterKit, FindReplace], content: '<p>Ash and <b>as</b>h, ashen ASH.</p>' })
+    editor.commands.setFind({ query: 'ash' })
+    expect(findKey.getState(editor.state)!.matches.length).toBe(4)
+    editor.commands.setFind({ query: 'ash', wholeWord: true })
+    expect(findKey.getState(editor.state)!.matches.length).toBe(3)
+    editor.commands.setFind({ query: 'ash', wholeWord: true, caseSensitive: true })
+    expect(findKey.getState(editor.state)!.matches.length).toBe(1)
+    editor.commands.setFind({ query: 'ash', wholeWord: true, caseSensitive: false })
+    editor.commands.replaceAll('cinder')
+    expect(editor.getText()).toBe('cinder and cinder, ashen cinder.')
+    editor.commands.undo()
+    expect(editor.getText()).toBe('Ash and ash, ashen ASH.')
+    editor.destroy()
+  })
+})
+
+describe('contents', () => {
+  it('renders a table of contents as a list of headings in Markdown', () => {
+    const c = sample()
+    c.doc.content!.unshift({ type: 'cordToc' })
+    expect(cordToMarkdown(c.doc)).toContain('**Contents**\n\n- Letter')
+  })
+})

@@ -130,6 +130,10 @@ export async function cordToDocx(cord: CordFile, name: string): Promise<Uint8Arr
         case 'pageBreak':
           breakNext = true
           break
+        case 'cordToc':
+          // A real Word table of contents; Word fills in the page numbers on open.
+          out.push(new d.TableOfContents('Contents', { hyperlink: true, headingStyleRange: '1-3' }) as unknown as Block)
+          break
         case 'image':
           out.push(new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: `[${n.attrs?.alt || 'image'}]`, italics: true })] }))
           break
@@ -189,6 +193,7 @@ export async function cordToDocx(cord: CordFile, name: string): Promise<Uint8Arr
   const children = blocks(cord.doc.content)
   const doc = new Document({
     creator: 'THREAD',
+    features: { updateFields: true },
     title,
     styles: {
       default: {
