@@ -31,11 +31,17 @@ A local-first, Core/Host workspace for worldbuilders and writers. It takes Notio
   - Type `[[` to get a fuzzy Stitch picker. Picking a name that doesn't exist yet creates that Thread when the Stitch is first clicked.
   - Select text to get a bubble menu with formatting, highlight, link and "Stitch the selection".
   - Paste or drop images and PDFs straight into the vault.
+  - Notion's block handle: hover a block for **+** (add a block below, with the `/` menu) and **⋮⋮** (drag to move it, or click for Turn into, Duplicate, Move up/down, Delete). On touch screens the handle follows the cursor. **Ctrl/⌘+Shift+↑/↓** moves a block and **Ctrl/⌘+D** duplicates it.
+  - **Callouts** and **toggles** (`/callout`, `/toggle`, or Turn into), saved as Obsidian callouts (`> [!tip] Title`, `> [!toggle]- Summary`) so the file stays readable anywhere. Click a callout's icon to change its type, or a toggle's arrow to fold it.
+  - **@** mentions a page (as a Stitch) or today's date. **Ctrl/⌘+F** finds and **Ctrl/⌘+H** replaces in the page. **Duplicate** is in every page's Spool menu.
   - Keys work like a word processor: **Tab** indents (stored as two em spaces, which the `.md` file keeps), **Shift+Tab** removes an indent, **Shift+Enter** breaks the line inside a paragraph, **Enter** starts a new paragraph (where `/` opens the block menu). In lists Tab nests the item; in tables it moves to the next cell.
   - A page's name follows its title: change the `#` title of a page that is still named after its title (or "Untitled") and the file, the Spool and every Stitch to it follow a moment later. New pages get names that are unique across the vault.
 - **Cords** (the word processor): start one with **New Cord** in the Spool, "New Cord here" on a folder, or **Convert to Cord** on any Thread (the Thread is left as it is).
   - Real pages: Letter, A4, A5, Legal or 6×9 trade, portrait or landscape, with margin presets or exact inches. Blocks flow onto the page they fit on.
   - A Word-style ribbon. **Home**: paragraph styles, font, size, bold/italic/underline/strike, super- and subscript, text color, highlight, alignment (left, center, right, justify), lists, indent (Tab / Shift+Tab), first-line indent and line spacing. **Insert**: page break (Ctrl+Enter), footnote, Stitch, table, image, divider, date. **Layout**: page size, orientation, margins and the document's base font, size, spacing and indent. **Header & Footer**: left/center/right slots with `{page}`, `{pages}`, `{title}`, `{author}` and `{date}`, page-number presets, 1/i/I/a numbering, a starting number and a different first page. **Review**: word, character, page and footnote counts.
+  - Typing works like Word: Enter starts a clean paragraph, **Tab** at the start of a line indents its first line (in the middle of text it types a tab), **Shift+Tab** or **Backspace** takes the indent back, **Shift+Enter** breaks the line. New Cords start like Word's Normal style (no automatic indent, a little space after paragraphs); **Layout → Preset** switches to Manuscript, Double-spaced, Book or Single.
+  - **Find & Replace** (Ctrl+F / Ctrl+H): live highlights, match case, whole words, replace all. A **status bar** shows the page you're on, the word count (or the selection's) and a zoom slider.
+  - **Insert → Contents** adds a live table of contents with page numbers (a real Word table of contents in .docx). Also: links (Ctrl+K), symbols, change case, space before/after paragraphs, and Word's shortcuts (Ctrl+L/E/R/J alignment, Ctrl+Shift+>/< font size, Ctrl+1/5/2 line spacing).
   - Linked footnotes: numbered automatically, printed at the foot of their page and edited right there. Click a reference to jump to its note, or a note's number to jump back.
   - Exports: **PDF** (print exactly what's on screen), **Word** (native headers and footers, live page fields, real footnotes, page size and margins) and **Markdown**.
   - Cords keep Dyes, icons, Stitches and backlinks like any Thread, and the Compiler can bind them.
@@ -45,7 +51,7 @@ A local-first, Core/Host workspace for worldbuilders and writers. It takes Notio
 - **Spool** (left): nested pages, like Notion's sidebar.
   - Every Thread and Project can hold pages. Its arrow expands it; an empty one says "No pages inside".
   - Hover a row for **+** (a new page inside it, named right in the Spool) and **⋯** (rename, dye, style, open beside, delete). **Add a page** sits at the end of the tree. Double-click a row to rename it; renaming a page also updates a title that matched its old name.
-  - Drag a row onto the top or bottom edge of another to put it there, or onto its middle to nest it inside. The order is saved in `.thread/order.json`, so it follows the vault to every device.
+  - Drag a row onto the top or bottom edge of another to put it there, or onto its middle to nest it inside. On touch screens, hold a row for its menu, or hold and drag it. The order is saved in `.thread/order.json`, so it follows the vault to every device.
   - OS file drops import into the folder or page you drop on. Below the tree is a Dye list that filters the Spool.
 - **Stitching** (right): backlinks with the surrounding line, outgoing Stitches, an outline, Dye editing with palette swatches, and tactile frontmatter controls. Properties use rocker toggles, rotary knobs for numbers, dates, lists and Stitch properties.
 - **Tables**: typed columns (Text, Number with Σ totals, Stitch, Dye, Check, Date), sorting and add/remove. Stitch cells are real links, so relations show up in the Tapestry and in backlinks.
@@ -246,6 +252,7 @@ tests/          vitest suites
 - the editor's Markdown round trip
 - parsing and tables
 - PDF/DOCX export
+- callouts and toggles, Tab indents, find & replace
 - Cords: file round trip, Markdown rendering with footnotes, indexing, rename rewrites, page-number formats and the Word export (footnotes, page setup, page fields)
 - deadline extraction, reminder timing and ICS output
 - Google Calendar sync against an in-memory fake of the Calendar API

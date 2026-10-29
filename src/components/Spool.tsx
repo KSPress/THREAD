@@ -747,6 +747,16 @@ function ContextMenu({
               )}
             </>
           )}
+          {node.file.kind === 'thread' && (
+            <button
+              onClick={async () => {
+                const s = useStore.getState()
+                s.open(await s.duplicateThread(node.path))
+              }}
+            >
+              <Icon name="layers" size={15} /> Duplicate
+            </button>
+          )}
           <button onClick={() => onRename(node.path)}>
             <Icon name="rename" size={15} /> Rename
           </button>

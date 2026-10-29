@@ -29,6 +29,8 @@ export const SLASH_ITEMS: MenuItem[] = [
   block('quote', 'Quote', '❝', 'Basic', 'Capture a quote', (e) => e.chain().toggleBlockquote().run()),
   block('code', 'Code', '</>', 'Basic', 'Code block', (e) => e.chain().toggleCodeBlock().run()),
   block('hr', 'Divider', '—', 'Basic', 'Visual break', (e) => e.chain().setHorizontalRule().run()),
+  block('toggle', 'Toggle', '▸', 'Basic', 'Fold content away under a summary', (e) => e.chain().setToggle().run()),
+  block('callout', 'Callout', '💡', 'Basic', 'Make a note stand out', (e) => e.chain().setCallout('tip').run()),
   block('table', 'Table', '▦', 'Weave', 'Relational, typed columns', (e) => e.chain().insertThreadTable().run()),
   block('grid', 'Simple grid', '▤', 'Weave', 'Plain Markdown table', (e) =>
     e.chain().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(),
@@ -90,7 +92,25 @@ export const StitchPicker = suggestExtension({
   char: '[[',
   title: 'STITCH TO',
   allowSpaces: true,
+  items: (query) => stitchItems(query, true),
+})
+
+/** Notion's @: mention a page (as a Stitch) or today's date. */
+export const MentionPicker = suggestExtension({
+  name: 'mentionPicker',
+  char: '@',
+  title: 'MENTION',
   items: (query) => {
+    const today = new Date()
+    const label = today.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
+    const dates: MenuItem[] = 'today'.startsWith(query.toLowerCase()) || 'date'.startsWith(query.toLowerCase())
+      ? [{ id: '__today', title: 'Today', hint: label, glyph: '◷', run: (e, range) => e.chain().focus().deleteRange(range).insertContent(label + ' ').run() }]
+      : []
+    return [...dates, ...stitchItems(query, false).slice(0, 10)]
+  },
+})
+
+function stitchItems(query: string, allowNew: boolean): MenuItem[] {
     const { threads, files, dyeColor } = useStore.getState()
     const q = query.replace(/\]+$/, '')
     const items: (MenuItem & { score: number })[] = []
@@ -123,7 +143,7 @@ export const StitchPicker = suggestExtension({
     }
     items.sort((a, b) => b.score - a.score || a.title.localeCompare(b.title))
     const out: MenuItem[] = items.slice(0, 12)
-    if (q.trim() && !items.some((i) => i.title.toLowerCase() === q.trim().toLowerCase())) {
+    if (allowNew && q.trim() && !items.some((i) => i.title.toLowerCase() === q.trim().toLowerCase())) {
       out.push({
         id: '__new',
         title: `Weave “${q.trim()}”`,
@@ -133,5 +153,4 @@ export const StitchPicker = suggestExtension({
       })
     }
     return out
-  },
-})
+}

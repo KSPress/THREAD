@@ -136,6 +136,8 @@ interface Actions {
   setFrontmatter(path: string, fm: Frontmatter): Promise<void>
   createThread(dir: string, name: string, body?: string, fm?: Frontmatter): Promise<string>
   createProject(name: string, parent?: string): Promise<string>
+  /** Notion's Duplicate: a copy beside the original, named "… copy". */
+  duplicateThread(path: string): Promise<string>
   /** A Thread nested under another: stored in a folder named after the parent, next to it. */
   createSubThread(parent: string, name: string, opts?: { stitch?: boolean }): Promise<string>
   /** A new Cord (word-processor document); optionally converted from a Thread's content. */
@@ -344,6 +346,21 @@ export const useStore = create<State & Actions>((set, get) => ({
     const content = joinFrontmatter(fm ?? {}, body ?? `# ${stem(path)}\n\n`)
     await get().saveThread(path, content)
     return path
+  },
+
+  async duplicateThread(path) {
+    const t = get().threads[path]
+    if (!t) return path
+    const adapter = get().adapter!
+    const ext = extname(path)
+    const name = `${stem(path)} copy`
+    const taken = new Set(Object.keys(get().threads).map((p) => stem(p).toLowerCase()))
+    let to = join(dirname(path), name + ext)
+    for (let i = 2; get().files[to] || taken.has(stem(to).toLowerCase()) || (await adapter.exists(to)); i++) to = join(dirname(path), `${name} ${i}${ext}`)
+    const re = new RegExp(`^# ${escapeRe(stem(path))}[ \\t]*$`, 'm')
+    const raw = t.kind === 'thread' ? t.head + t.body.replace(re, `# ${stem(to)}`) : t.raw
+    await get().saveThread(to, raw)
+    return to
   },
 
   async createSubThread(parent, name, opts = {}) {

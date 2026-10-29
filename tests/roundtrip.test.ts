@@ -56,3 +56,18 @@ describe('indents', () => {
     expect(roundtrip(md).trim()).toBe(md.trim())
   })
 })
+
+describe('callouts and toggles', () => {
+  it('keep Obsidian callout syntax through the editor', () => {
+    const md = 'Intro.\n\n> [!tip] Remember\n> The ash **remembers**.\n>\n> - one\n> - two\n\n> [!toggle]- Spoilers\n> Bren is the heir.\n\nAfter.\n'
+    const out = roundtrip(md)
+    expect(out).toContain('> [!tip] Remember\n> The ash **remembers**.')
+    expect(out).toContain('> - one')
+    expect(out).toContain('> [!toggle]- Spoilers\n> Bren is the heir.')
+    expect(out.trim().endsWith('After.')).toBe(true)
+    expect(roundtrip(out)).toBe(out)
+  })
+  it('leaves ordinary quotes alone', () => {
+    expect(roundtrip('> Just a quote.\n').trim()).toBe('> Just a quote.')
+  })
+})

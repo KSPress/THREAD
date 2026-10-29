@@ -5,12 +5,15 @@ import { TableKit } from '@tiptap/extension-table'
 import { Placeholder } from '@tiptap/extensions'
 import { Markdown } from '@tiptap/markdown'
 import StarterKit from '@tiptap/starter-kit'
-import { SlashCommand, StitchPicker } from './commands'
+import { MentionPicker, SlashCommand, StitchPicker } from './commands'
 import { Pinboard } from './Pinboard'
 import { Stitch } from './Stitch'
 import { ThreadTable } from './ThreadTable'
 import { VaultImage } from './VaultImage'
 import { Indent } from './Indent'
+import { Callout } from './Callout'
+import { BlockHandle } from './BlockHandle'
+import { FindReplace } from './find'
 
 /** Nodes and marks that define the document schema (and its Markdown form). */
 export function schemaExtensions(): Extensions {
@@ -27,6 +30,7 @@ export function schemaExtensions(): Extensions {
     Stitch,
     ThreadTable,
     Pinboard,
+    Callout,
     Markdown.configure({ markedOptions: { gfm: true } }),
   ]
 }
@@ -40,6 +44,9 @@ export function editorExtensions(): Extensions {
     }),
     SlashCommand,
     StitchPicker,
+    MentionPicker,
     Indent,
+    BlockHandle,
+    FindReplace,
   ]
 }

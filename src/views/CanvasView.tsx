@@ -12,6 +12,8 @@ import { folderNote, isCompact, MAX_PANES, useDyeColor, useStore, type Highlight
 import { basename, dirname, kindOf, stem } from '../core/paths'
 import { saveFile } from '../core/platform'
 import { ThreadEditor } from '../editor/ThreadEditor'
+import { FindBar } from '../editor/FindBar'
+import type { Editor } from '@tiptap/core'
 
 const CordView = lazy(() => import('../cord/CordView'))
 const PdfReader = lazy(() => import('./PdfReader').then((m) => ({ default: m.PdfReader })))
@@ -321,13 +323,29 @@ function ThreadPane({ path }: { path: string }) {
   const createSubThread = useStore((s) => s.createSubThread)
   const dyeColor = useDyeColor()
   const [stylePop, setStylePop] = useState<{ rect: DOMRect; tab: 'icon' | 'color' | 'background' } | null>(null)
+  const [editor, setEditor] = useState<Editor | null>(null)
+  const [find, setFind] = useState<null | 'find' | 'replace'>(null)
   if (!thread) return null
   if (thread.kind === 'cord') return <CordView path={path} />
 
   const hasIcon = !!parseIcon(thread.frontmatter.icon)
   const tint = threadColor(thread.frontmatter, thread.dyes, dyeColor)
   return (
-    <div className="canvas-scroll">
+    <div
+      className="canvas-scroll"
+      onKeyDownCapture={(e) => {
+        const k = e.key.toLowerCase()
+        if ((e.ctrlKey || e.metaKey) && !e.altKey && (k === 'f' || k === 'h')) {
+          e.preventDefault()
+          setFind(k === 'h' ? 'replace' : 'find')
+        }
+      }}
+    >
+      {find && editor && (
+        <div className="thread-find">
+          <FindBar editor={editor} replace={find === 'replace'} onClose={() => setFind(null)} />
+        </div>
+      )}
       <article className="editor-card" data-tinted={tint ? '' : undefined} style={tint ? ({ ['--thread-c' as any]: tint } as React.CSSProperties) : undefined}>
         <div className="thread-head">
           {hasIcon && (
@@ -363,7 +381,7 @@ function ThreadPane({ path }: { path: string }) {
             ))}
           </div>
         )}
-        <ThreadEditor path={path} />
+        <ThreadEditor path={path} onEditor={setEditor} />
       </article>
     </div>
   )
