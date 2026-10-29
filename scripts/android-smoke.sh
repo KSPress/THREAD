@@ -22,6 +22,6 @@ for scenario in newvault sample loom; do
   adb exec-out screencap -p > "smoke/$scenario-end.png"
   adb logcat -d > "smoke/$scenario-logcat.txt"
   echo "--- crash / error lines ---"
-  grep -E "FATAL|AndroidRuntime|panicked|RustStdoutStderr|Tauri|SIGABRT|SIGSEGV|libc *:|chromium.*(Uncaught|Error)|Console" "smoke/$scenario-logcat.txt" | tail -80
+  grep -E "FATAL|AndroidRuntime|panicked|RustStdoutStderr|Tauri|SIGABRT|SIGSEGV|chromium.*(Uncaught|Error|crash)|Console|ActivityManager.*(died|crash|ANR)" "smoke/$scenario-logcat.txt" | grep -v "s_glBindAttribLocation" | tail -80
   echo "::endgroup::"
 done
