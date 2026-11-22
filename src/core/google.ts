@@ -1,10 +1,33 @@
 // Google sign-in shared by Calendar and Drive. Browsers use Google Identity
-// Services (a short-lived token in this tab); the desktop and Android apps
-// use the loopback + PKCE flow in the Rust host, which also returns a refresh
-// token so they stay connected across restarts. Each integration keeps its
-// own token and asks only for its own narrow scope.
+// Services, desktop uses loopback + PKCE, and Android uses Play services.
 import { useSettings } from './settings'
-import { isTauri } from './vault'
+import { isMobileOS, isTauri } from './vault'
+
+export const usesAndroidGoogle = () => isTauri() && isMobileOS() && /Android/i.test(navigator.userAgent)
+
+function googleClient() {
+  const { gcalClientId, gcalClientSecret } = useSettings.getState()
+  if (gcalClientId) return { clientId: gcalClientId, clientSecret: gcalClientSecret }
+  if (isTauri()) return {
+    clientId: import.meta.env.VITE_THREAD_GOOGLE_DESKTOP_CLIENT_ID?.trim(),
+    clientSecret: '',
+  }
+  return { clientId: import.meta.env.VITE_THREAD_GOOGLE_WEB_CLIENT_ID?.trim(), clientSecret: '' }
+}
+
+export const googleConfigured = () => usesAndroidGoogle() || !!googleClient().clientId
+
+async function androidToken(scope: string, interactive: boolean): Promise<GoogleToken> {
+  const { invoke } = await import('@tauri-apps/api/core')
+  try {
+    const access_token = await invoke<string>('google_android_authorize', { scope, interactive })
+    return { access_token, expires_at: Date.now() + 45 * 60_000 }
+  } catch (error) {
+    if (!interactive) throw new GoogleAuthError()
+    if (String(error).includes('not found')) throw new Error('Install the latest Thread APK to connect Google Drive.')
+    throw error
+  }
+}
 
 export interface GoogleToken {
   access_token: string
@@ -45,7 +68,7 @@ export function createGoogleAuth(opts: { key: string; scope: string; what: strin
       const raw = storage().getItem(opts.key)
       const t = raw ? (JSON.parse(raw) as GoogleToken) : null
       if (!t) return null
-      if (t.expires_at < Date.now() + 60_000 && !t.refresh_token) return null
+      if (t.expires_at < Date.now() + 60_000 && !t.refresh_token && !usesAndroidGoogle()) return null
       return t
     } catch {
       return null
@@ -58,14 +81,15 @@ export function createGoogleAuth(opts: { key: string; scope: string; what: strin
 
   /** Must be called from a user gesture (it opens Google's consent page). */
   const connect = async () => {
-    const { gcalClientId, gcalClientSecret } = useSettings.getState()
-    if (!gcalClientId) throw new Error('Add your Google OAuth client ID first (Make it yours → Google).')
+    if (usesAndroidGoogle()) return save(await androidToken(opts.scope, true))
+    const { clientId, clientSecret } = googleClient()
+    if (!clientId) throw new Error('Google Drive or Calendar is unavailable in this build. You can still use a local vault.')
     let token: GoogleToken
     if (isTauri()) {
       const { invoke } = await import('@tauri-apps/api/core')
       const r = await invoke<{ access_token: string; expires_in: number; refresh_token?: string }>('google_oauth_start', {
-        clientId: gcalClientId,
-        clientSecret: gcalClientSecret,
+        clientId,
+        clientSecret,
         scope: opts.scope,
       })
       token = { access_token: r.access_token, expires_at: Date.now() + r.expires_in * 1000, refresh_token: r.refresh_token }
@@ -73,8 +97,9 @@ export function createGoogleAuth(opts: { key: string; scope: string; what: strin
       await loadGis()
       token = await new Promise<GoogleToken>((resolve, reject) => {
         const client = (window as any).google.accounts.oauth2.initTokenClient({
-          client_id: gcalClientId,
+          client_id: clientId,
           scope: opts.scope,
+          include_granted_scopes: false,
           callback: (r: any) =>
             r.error ? reject(new Error(r.error_description ?? r.error)) : resolve({ access_token: r.access_token, expires_at: Date.now() + Number(r.expires_in) * 1000 }),
           error_callback: (e: any) => reject(new Error(e?.message ?? e?.type ?? 'Sign-in was cancelled')),
@@ -95,12 +120,17 @@ export function createGoogleAuth(opts: { key: string; scope: string; what: strin
     const t = load()
     if (!t) throw new GoogleAuthError(opts.what)
     if (t.expires_at > Date.now() + 60_000) return t.access_token
+    if (usesAndroidGoogle()) {
+      const next = await androidToken(opts.scope, false)
+      save(next)
+      return next.access_token
+    }
     if (t.refresh_token && isTauri()) {
-      const { gcalClientId, gcalClientSecret } = useSettings.getState()
+      const { clientId, clientSecret } = googleClient()
       const { invoke } = await import('@tauri-apps/api/core')
       const r = await invoke<{ access_token: string; expires_in: number }>('google_oauth_refresh', {
-        clientId: gcalClientId,
-        clientSecret: gcalClientSecret,
+        clientId,
+        clientSecret,
         refreshToken: t.refresh_token,
       })
       const next = { ...t, access_token: r.access_token, expires_at: Date.now() + r.expires_in * 1000 }

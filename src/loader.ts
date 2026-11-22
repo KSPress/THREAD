@@ -5,6 +5,8 @@
 // native features are the same either way. Offline, or if the live build
 // cannot load, the bundled build starts.
 
+import { fetchRelease, isNewerRelease, releaseEntry, UPDATE_REQUEST } from './core/release'
+
 // Small polyfills for older web views (Android System WebView, older Safari),
 // installed before any app code runs.
 if (!('withResolvers' in Promise)) {
@@ -30,55 +32,68 @@ if (!Object.hasOwn) {
 }
 
 const SETTINGS_KEY = 'thread.settings.v1'
-const TIMEOUT = 2500
-
 function liveAllowed() {
   try {
+    if (sessionStorage.getItem(UPDATE_REQUEST)) {
+      sessionStorage.removeItem(UPDATE_REQUEST)
+      return true
+    }
     return JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}').liveUpdates !== false
   } catch {
     return true
   }
 }
 
-async function newerLiveBuild() {
-  const ctrl = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(), TIMEOUT)
+async function runLive(): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined
   try {
-    const res = await fetch(`${__THREAD_LIVE_URL__}version.json?t=${Date.now()}`, { cache: 'no-store', signal: ctrl.signal })
-    if (!res.ok) return null
-    const live = (await res.json()) as typeof __THREAD_BUILD__
-    return live.entry && live.time > __THREAD_BUILD__.time && live.id !== __THREAD_BUILD__.id ? live : null
+    const build = await fetchRelease(__THREAD_LIVE_URL__)
+    if (!isNewerRelease(__THREAD_BUILD__, build) || build.liveProtocol !== 1) return false
+    const url = releaseEntry(__THREAD_LIVE_URL__, build.entry)
+    window.__THREAD_LIVE_ENTRY__ = url.href
+    window.__THREAD_LIVE__ = { base: __THREAD_LIVE_URL__, build }
+    const load = async () => {
+      await import(/* @vite-ignore */ url.href)
+      const boot = window.__THREAD_LIVE_BOOT__
+      if (!boot) throw new Error('Update bootstrap is missing')
+      return boot()
+    }
+    const mount = await Promise.race([
+      load(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('Update load timed out')), 8000)
+      }),
+    ])
+    mount()
+    return true
   } catch {
-    return null
+    delete window.__THREAD_LIVE__
+    return false
   } finally {
     clearTimeout(timer)
+    delete window.__THREAD_LIVE_BOOT__
   }
 }
 
-function runLive(build: typeof __THREAD_BUILD__): Promise<boolean> {
-  window.__THREAD_LIVE__ = { base: __THREAD_LIVE_URL__, build }
-  return new Promise((resolve) => {
-    const s = document.createElement('script')
-    s.type = 'module'
-    s.src = new URL(build.entry!, __THREAD_LIVE_URL__).href
-    s.onload = () => resolve(true)
-    s.onerror = () => {
-      delete window.__THREAD_LIVE__
-      s.remove()
-      resolve(false)
-    }
-    document.head.appendChild(s)
-  })
+async function loadMain() {
+  return (await import('./main')).mountThread
 }
 
 async function start() {
   const inApp = '__TAURI_INTERNALS__' in window
   // The live build's own loader lands here too: it must start its app, not look again.
   if (import.meta.env.PROD && inApp && !window.__THREAD_LIVE__ && liveAllowed()) {
-    const live = await newerLiveBuild()
-    if (live && (await runLive(live))) return
+    if (await runLive()) return
   }
-  await import('./main')
+  const mount = await loadMain()
+  mount()
 }
 
-void start()
+// Use the canonical URL because the app's chunks can also import this entry.
+// Keeping the marker after a timeout prevents a late module from mounting.
+// Older installers do not set it and use the ordinary startup path.
+if (window.__THREAD_LIVE_ENTRY__ === import.meta.url) {
+  if (window.__THREAD_LIVE__) window.__THREAD_LIVE_BOOT__ = loadMain
+} else {
+  void start()
+}

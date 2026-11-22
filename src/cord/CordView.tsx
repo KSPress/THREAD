@@ -16,7 +16,7 @@ import { Icon } from '../components/Icon'
 import { computeLayout, layoutSignature, PAGE_GAP, pageBox, type Layout } from './layout'
 import { cordToMarkdown, fillTokens, fontStack, formatNumber, parseCord, serializeCord, type CordFile } from './model'
 import { Ribbon, type ExportKind } from './Ribbon'
-import { onBeforeReload } from '../core/update'
+import { onBeforeReload, trackEditorSave } from '../core/update'
 
 const SAVE_DELAY = 500
 
@@ -27,7 +27,11 @@ export function flushCord(path: string) {
   const take = dirtyCords.get(path)
   if (!take) return
   dirtyCords.delete(path)
-  return useStore.getState().saveThread(path, serializeCord(take()))
+  const raw = serializeCord(take())
+  return trackEditorSave(useStore.getState().saveThread(path, raw).catch((error: unknown) => {
+    if (!dirtyCords.has(path)) dirtyCords.set(path, () => parseCord(raw))
+    throw error
+  }))
 }
 
 export default function CordView({ path }: { path: string }) {

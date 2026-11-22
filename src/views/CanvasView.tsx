@@ -11,6 +11,7 @@ import { DyeBadge } from '../components/DyeBadge'
 import { folderNote, isCompact, MAX_PANES, useDyeColor, useStore, type Highlight, type Pane } from '../core/store'
 import { basename, dirname, kindOf, stem } from '../core/paths'
 import { saveFile } from '../core/platform'
+import { compareDriveMarkdown, useDrive } from '../core/gdrive'
 import { ThreadEditor } from '../editor/ThreadEditor'
 import { FindBar } from '../editor/FindBar'
 import type { Editor } from '@tiptap/core'
@@ -24,11 +25,74 @@ const draggingDoc = (e: DragEvent) => {
   return types.includes('text/thread-path') || types.includes('Files')
 }
 
+function DriveComparison({ path }: { path: string }) {
+  const dialog = useRef<HTMLDialogElement>(null)
+  const [versions, setVersions] = useState<Awaited<ReturnType<typeof compareDriveMarkdown>>>()
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  const request = useRef(0)
+
+  async function load() {
+    const id = ++request.current
+    setLoading(true)
+    setVersions(undefined)
+    setError('')
+    try {
+      const versions = await compareDriveMarkdown(path)
+      if (id === request.current) setVersions(versions)
+    } catch (error) {
+      if (id === request.current) setError(error instanceof Error ? error.message : String(error))
+    } finally {
+      if (id === request.current) setLoading(false)
+    }
+  }
+
+  return (
+    <>
+      <button
+        className="icon-btn"
+        title="Compare Markdown with Google Drive"
+        aria-label="Compare Markdown with Google Drive"
+        onClick={() => {
+          dialog.current?.showModal()
+          void load()
+        }}
+      >
+        <Icon name="cloud" size={17} />
+      </button>
+      <dialog ref={dialog} className="drive-comparison" aria-label="Compare Markdown versions">
+        <header>
+          <div>
+            <h3>Compare Markdown versions</h3>
+            <p>{path}</p>
+          </div>
+          <form method="dialog"><button className="btn">Close</button></form>
+        </header>
+        {loading && <p role="status">Checking Google Drive…</p>}
+        {error && <p role="alert">{error}</p>}
+        {versions && (
+          <>
+            <p role="status">
+              {versions.drive === null ? 'This path has no copy in Drive.' : versions.local === versions.drive ? 'Both versions match.' : 'The versions differ.'}
+            </p>
+            <div className="drive-comparison__versions">
+              <section><h4>This device</h4><pre tabIndex={0} aria-label="Local Markdown">{versions.local}</pre></section>
+              <section><h4>Google Drive</h4><pre tabIndex={0} aria-label="Drive Markdown">{versions.drive ?? 'No copy at this path.'}</pre></section>
+            </div>
+          </>
+        )}
+        <button className="btn" disabled={loading} onClick={() => void load()}>Check again</button>
+      </dialog>
+    </>
+  )
+}
+
 export function CanvasView() {
   const active = useStore((s) => s.active)
   const panesState = useStore((s) => s.panes)
   const files = useStore((s) => s.files)
   const thread = useStore((s) => (s.active ? s.threads[s.active] : undefined))
+  const driveLinked = useDrive((s) => !!s.rootId)
   const threads = useStore((s) => s.threads)
   const stitchingOpen = useStore((s) => s.stitchingOpen)
   const spoolOpen = useStore((s) => s.spoolOpen)
@@ -209,6 +273,7 @@ export function CanvasView() {
               <Icon name="download" size={17} />
             </button>
           )}
+          {driveLinked && active && thread?.kind === 'thread' && <DriveComparison key={active} path={active} />}
           <button
             className={'icon-btn' + (stitchingOpen ? ' is-on' : '')}
             title="Stitching panel (Ctrl+Shift+\)"

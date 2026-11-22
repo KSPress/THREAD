@@ -49,6 +49,7 @@ jobs:
       - name: Generate the Android project
         run: |
           npx tauri android init --ci
+          node scripts/prepare-android-google.mjs
           npx tauri icon src-tauri/app-icon.png
 
       # Debug build: the WebView can be driven over DevTools. The live updater

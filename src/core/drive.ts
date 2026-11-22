@@ -134,9 +134,9 @@ interface FileState {
   id: string
   /** Drive's checksum when last in step. */
   md5?: string
-  /** This device's copy when last in step. */
-  lsize: number
-  lmtime: number
+  /** Metadata verified against the synced bytes. Older links lack this snapshot. */
+  local?: { size: number; mtime: number }
+  /** Hash of the bytes last exchanged with Drive. */
   lhash: string
 }
 
@@ -254,16 +254,13 @@ export async function syncDrive(
   }
 
   const readLocal = (path: string) => adapter.readBinary(path)
-  const writeLocal = async (path: string, bytes: Uint8Array) => {
-    if (isText(path)) await adapter.writeText(path, new TextDecoder().decode(bytes))
-    else await adapter.writeBinary(path, bytes)
-  }
+  const writeLocal = (path: string, bytes: Uint8Array) => adapter.writeBinary(path, bytes)
   const upload = async (path: string, bytes: Uint8Array, existing?: string) => {
     const f = existing ? await api.update(existing, bytes, mimeOf(path)) : await api.upload(path.slice(path.lastIndexOf('/') + 1), await ensureRemoteFolder(dirOf(path)), bytes, mimeOf(path))
     return f
   }
   const track = async (path: string, f: DriveFile, bytes: Uint8Array) => {
-    state.files[path] = { id: f.id, md5: f.md5Checksum, lsize: -1, lmtime: -1, lhash: await sha(bytes) }
+    state.files[path] = { id: f.id, md5: f.md5Checksum, lhash: await sha(bytes) }
   }
 
   const paths = new Set([...localFiles.keys(), ...remote.files.keys(), ...Object.keys(state.files)])
@@ -275,16 +272,16 @@ export async function syncDrive(
     const s = state.files[path]
     const L = localFiles.get(path)
     const R = remote.files.get(path)
-    // Has this device's copy changed since the last sync? Size/time first, then contents.
+    // Always check text by content: rapid same-length edits can share a timestamp.
     let localBytes: Uint8Array | undefined
     const localChanged = async () => {
       if (!L) return false
       if (!s) return true
-      if (L.size === s.lsize && L.mtime === s.lmtime) return false
+      if (!isText(path) && L.size === s.local?.size && L.mtime === s.local.mtime) return false
       localBytes ??= await readLocal(path)
       if ((await sha(localBytes)) !== s.lhash) return true
       // Touched but identical: remember the new time so it isn't hashed again.
-      state.files[path] = { ...s, lsize: L.size, lmtime: L.mtime }
+      if (!isText(path)) state.files[path] = { ...s, local: { size: L.size, mtime: L.mtime } }
       return false
     }
     const remoteChanged = () => !!R && (!s || R.md5Checksum !== s.md5)
@@ -314,6 +311,12 @@ export async function syncDrive(
         report.uploaded.push(path)
       } else if (rc) {
         const rb = await api.download(R.id)
+        // A draft may have changed while the download was in flight. Let the
+        // next pass compare both versions before replacing the local file.
+        if (opts.busy?.(path) || !(await adapter.exists(path)) || (await sha(await readLocal(path))) !== s.lhash || opts.busy?.(path)) {
+          report.skipped.push(path)
+          continue
+        }
         await writeLocal(path, rb)
         await track(path, R, rb)
         report.downloaded.push(path)
@@ -337,6 +340,10 @@ export async function syncDrive(
         report.deletedRemote.push(path)
       } else {
         const rb = await api.download(R.id)
+        if ((await adapter.exists(path)) || opts.busy?.(path)) {
+          report.skipped.push(path)
+          continue
+        }
         await writeLocal(path, rb)
         await track(path, R, rb)
         report.downloaded.push(path)
@@ -373,11 +380,16 @@ export async function syncDrive(
   }
   state.folders = Object.fromEntries([...remote.folders.entries()].filter(([p]) => p && afterDirs.has(p)))
 
-  // Remember the size and time of what this sync wrote or sent (never of
-  // files it skipped: their edits must still look new next time).
+  // A save may land during a transfer. Cache metadata only when it describes
+  // the same content as the transfer, and leave skipped files for the next run.
+  const skipped = new Set(report.skipped)
   for (const e of after) {
     const s = state.files[e.path]
-    if (s && !e.dir && s.lsize === -1) state.files[e.path] = { ...s, lsize: e.size, lmtime: e.mtime }
+    if (!s || s.local || e.dir || isText(e.path) || skipped.has(e.path)) continue
+    const bytes = await readLocal(e.path).catch(async (error: unknown) => {
+      if (await adapter.exists(e.path)) throw error
+    })
+    if (bytes && (await sha(bytes)) === s.lhash) state.files[e.path] = { ...s, local: { size: e.size, mtime: e.mtime } }
   }
   state.lastSync = (opts.now ?? new Date()).getTime()
   return { link: state, report }

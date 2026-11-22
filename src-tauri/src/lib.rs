@@ -264,10 +264,13 @@ pub(crate) fn percent_decode(s: &str) -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_opener::init());
+    #[cfg(target_os = "android")]
+    let builder = builder.plugin(google::android_plugin());
+    builder
         .invoke_handler(tauri::generate_handler![
             vault_list,
             vault_read_text,
@@ -284,6 +287,7 @@ pub fn run() {
             pandoc_available,
             pandoc_convert,
             google::google_oauth_start,
+            google::google_android_authorize,
             google::google_oauth_refresh
         ])
         .run(tauri::generate_context!())

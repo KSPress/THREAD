@@ -130,6 +130,43 @@ describe('Google Drive sync', () => {
     expect(r2.report.uploaded).toEqual(['Draft.md'])
   })
 
+  it.each(['upload', 'update'] as const)('syncs a newer local save after an in-flight %s', async (operation) => {
+    const { api } = fakeDrive()
+    const root = await api.createFolder('V', 'root')
+    const v = new BrowserVault(`drive-save-during-${operation}`)
+    const sync = (link: DriveLink) => syncDrive(v, api, link, { device: 'X' })
+    let link: DriveLink = { rootId: root.id, folder: 'V', files: {}, folders: {} }
+    if (operation === 'update') {
+      await v.writeText('Draft.md', 'initial')
+      link = (await sync(link)).link
+      await tick()
+    }
+    await v.writeText('Draft.md', 'draft one')
+    const upload = api.upload
+    const update = api.update
+    if (operation === 'upload') {
+      api.upload = async (...args) => {
+        await v.writeText('Draft.md', 'draft two, saved while syncing')
+        return upload(...args)
+      }
+    } else {
+      api.update = async (...args) => {
+        await v.writeText('Draft.md', 'draft two, saved while syncing')
+        return update(...args)
+      }
+    }
+
+    const first = await sync(link)
+    const remote = (await api.children(root.id))[0]
+    const remoteText = async () => new TextDecoder().decode(await api.download(remote.id))
+    expect(await remoteText()).toBe('draft one')
+    api.upload = upload
+    api.update = update
+
+    expect((await sync(first.link)).report.uploaded).toEqual(['Draft.md'])
+    expect(await remoteText()).toBe('draft two, saved while syncing')
+  })
+
   it('mirrors folder deletions and keeps new empty folders', async () => {
     const { api, files } = fakeDrive()
     const root = await api.createFolder('V', 'root')
@@ -143,11 +180,79 @@ describe('Google Drive sync', () => {
     link = (await syncDrive(v, api, link, { device: 'X' })).link
     expect([...files.values()].find((f) => f.name === 'Old')!.trashed).toBe(true)
   })
+
+  it('preserves a local save that lands while a newer Drive version downloads', async () => {
+    const { api } = fakeDrive()
+    const root = await api.createFolder('V', 'root')
+    const v = new BrowserVault('drive-save-during-download')
+    const sync = (link: DriveLink) => syncDrive(v, api, link, { device: 'X' })
+    await v.writeText('Draft.md', 'initial')
+    const { link } = await sync({ rootId: root.id, folder: 'V', files: {}, folders: {} })
+    const [draft] = await api.children(root.id)
+    await api.update(draft.id, new TextEncoder().encode('Drive edit'), 'text/markdown')
+    const download = api.download
+    api.download = async (id) => {
+      await v.writeText('Draft.md', 'local edit during download')
+      return download(id)
+    }
+
+    const first = await sync(link)
+    expect(first.report.skipped).toEqual(['Draft.md'])
+    expect(await v.readText('Draft.md')).toBe('local edit during download')
+    api.download = download
+
+    const next = await sync(first.link)
+    expect(next.report.conflicts).toHaveLength(1)
+    expect(await v.readText(next.report.conflicts[0])).toBe('local edit during download')
+    expect(await v.readText('Draft.md')).toBe('Drive edit')
+  })
+
+  it('keeps downloaded Markdown bytes in step with Drive', async () => {
+    const { api } = fakeDrive()
+    const root = await api.createFolder('V', 'root')
+    const v = new BrowserVault('drive-markdown-bytes')
+    const bytes = new TextEncoder().encode('\uFEFF# Draft\r\n')
+    const file = await api.upload('Draft.md', root.id, bytes, 'text/markdown')
+    const { link } = await syncDrive(v, api, { rootId: root.id, folder: 'V', files: {}, folders: {} }, { device: 'X' })
+
+    expect(await v.readBinary('Draft.md')).toEqual(bytes)
+    expect((await syncDrive(v, api, link, { device: 'X' })).report.uploaded).toEqual([])
+    expect(await api.download(file.id)).toEqual(bytes)
+  })
 })
 
 describe('Google Drive in the app', () => {
+  it('connects Drive with the app client and requests only Drive permission', async () => {
+    const { signInDrive } = await import('../src/core/gdrive')
+    const { useSettings } = await import('../src/core/settings')
+    const { DRIVE_SCOPE } = await import('../src/core/drive')
+    const { vi } = await import('vitest')
+    const previous = useSettings.getState().gcalClientId
+    useSettings.getState().set({ gcalClientId: '' })
+    vi.stubEnv('VITE_THREAD_GOOGLE_WEB_CLIENT_ID', 'release-client.apps.googleusercontent.com')
+    const initTokenClient = vi.fn((options: { callback: (result: unknown) => void }) => ({
+      requestAccessToken: () => options.callback({ access_token: 'drive-only', expires_in: 3600 }),
+    }))
+    vi.stubGlobal('google', { accounts: { oauth2: { initTokenClient } } })
+    try {
+      await signInDrive()
+      expect(initTokenClient).toHaveBeenCalledWith(expect.objectContaining({
+        client_id: 'release-client.apps.googleusercontent.com',
+        scope: DRIVE_SCOPE,
+        include_granted_scopes: false,
+      }))
+      expect(sessionStorage.getItem('thread.gdrive.token')).toContain('drive-only')
+      expect(sessionStorage.getItem('thread.gcal.token')).toBeNull()
+    } finally {
+      sessionStorage.removeItem('thread.gdrive.token')
+      useSettings.getState().set({ gcalClientId: previous })
+      vi.unstubAllEnvs()
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('links the open vault to My Drive › THREAD › <vault> and applies remote edits to open Threads', async () => {
-    const { useStore } = await import('../src/core/store')
+    const { pendingEdits, useStore } = await import('../src/core/store')
     const gd = await import('../src/core/gdrive')
     const { api, files } = fakeDrive()
     gd.useDriveApi(api)
@@ -165,6 +270,16 @@ describe('Google Drive in the app', () => {
 
     // Edited elsewhere (another device, or Drive itself): THREAD picks it up.
     await api.update(plan.id, new TextEncoder().encode('# Plan\n\nFrom my phone.\n'), 'text/markdown')
+    pendingEdits.set('Plan.md', '# Plan\n\nLocal draft.\n')
+    try {
+      expect(await gd.compareDriveMarkdown('Plan.md')).toEqual({
+        local: '# Plan\n\nLocal draft.\n',
+        drive: '# Plan\n\nFrom my phone.\n',
+      })
+      expect(await v.readText('Plan.md')).toBe('# Plan\n')
+    } finally {
+      pendingEdits.delete('Plan.md')
+    }
     const before = useStore.getState().revisions['Plan.md'] ?? 0
     await gd.syncNow()
     expect(useStore.getState().threads['Plan.md'].body).toContain('From my phone.')

@@ -6,7 +6,7 @@ import { create } from 'zustand'
 import { deviceId } from './activity'
 import { openAdapter } from './boot'
 import { driveApi, DriveAuthError, DRIVE_SCOPE, FOLDER_MIME, syncDrive, type DriveApi, type DriveFile, type DriveLink, type SyncReport } from './drive'
-import { createGoogleAuth } from './google'
+import { createGoogleAuth, GoogleAuthError } from './google'
 import { idbDelete, idbGet, idbSet } from './idb'
 import { kindOf } from './paths'
 import { bumpPaths, pendingEdits, useStore } from './store'
@@ -44,6 +44,30 @@ export function deviceLabel() {
 }
 
 export const driveSignedIn = () => auth.connected()
+export const signInDrive = () => auth.connect()
+
+/** Read both versions without running sync or changing either copy. */
+export async function compareDriveMarkdown(path: string) {
+  const { adapter } = useStore.getState()
+  const link = adapter && (await loadLink())
+  if (!adapter || !link) throw new Error('Link this vault to Google Drive first.')
+  if (!auth.connected()) throw new Error('Sign in to Google Drive to compare versions.')
+
+  const parts = path.split('/')
+  const name = parts.pop()!
+  let parent: DriveFile | null = { id: link.rootId, name: link.folder, mimeType: FOLDER_MIME }
+  for (const part of parts) {
+    parent = await api.find(part, parent.id, true)
+    if (!parent) break
+  }
+  const file = parent && (await api.find(name, parent.id, false))
+  const drive = file ? new TextDecoder().decode(await api.download(file.id)) : null
+  const saved = await adapter.readText(path)
+  const current = useStore.getState()
+  if (current.adapter !== adapter) throw new Error('The open vault changed. Reopen the note to compare versions.')
+  const draft = pendingEdits.get(path)
+  return { local: draft === undefined ? saved : (current.threads[path]?.head ?? '') + draft, drive }
+}
 
 /** My Drive › THREAD (created on first use). */
 async function topFolder() {
@@ -57,8 +81,11 @@ export async function connectDrive() {
     if (!auth.connected()) await auth.connect()
     const name = useStore.getState().adapter!.name
     const top = await topFolder()
-    const folder = (await api.find(name, top.id, true)) ?? (await api.createFolder(name, top.id))
-    await saveLink({ rootId: folder.id, folder: name, files: {}, folders: {} })
+    const existing = await loadLink()
+    const found = await api.find(name, top.id, true)
+    if (existing && found?.id !== existing.rootId) throw new Error('Reconnect with the Google account that owns this vault.')
+    const folder = found ?? (await api.createFolder(name, top.id))
+    if (!existing) await saveLink({ rootId: folder.id, folder: name, files: {}, folders: {} })
     useDrive.setState({ status: 'idle', folder: name, rootId: folder.id })
     startDriveAutoSync()
     await syncNow()
@@ -146,7 +173,7 @@ async function run() {
     const conflicts = [...new Set([...useDrive.getState().conflicts, ...report.conflicts])].filter((p) => useStore.getState().files[p])
     useDrive.setState({ status: 'idle', lastSync: next.lastSync, report, conflicts })
   } catch (e) {
-    if (e instanceof DriveAuthError) {
+    if (e instanceof DriveAuthError || e instanceof GoogleAuthError) {
       auth.save(null)
       useDrive.setState({ status: 'expired', error: e.message })
     } else useDrive.setState({ status: navigator.onLine === false ? 'offline' : 'error', error: String((e as Error).message ?? e) })

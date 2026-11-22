@@ -10,7 +10,7 @@ import { dropQuote, quoteContent } from './quoteDrop'
 import { useSettings } from '../core/settings'
 import { kindOf, stem } from '../core/paths'
 import { editorExtensions } from './extensions'
-import { onBeforeReload } from '../core/update'
+import { onBeforeReload, trackEditorSave } from '../core/update'
 
 const SAVE_DELAY = 450
 /** Idle time before a changed title renames the file (the Spool follows the title). */
@@ -39,7 +39,10 @@ export function ThreadEditor({ path, onEditor }: { path: string; onEditor?: (e: 
     const pending = pendingEdits.get(p)
     if (pending === undefined) return
     pendingEdits.delete(p)
-    return useStore.getState().saveBody(p, pending)
+    return trackEditorSave(useStore.getState().saveBody(p, pending).catch((error: unknown) => {
+      if (!pendingEdits.has(p)) pendingEdits.set(p, pending)
+      throw error
+    }))
   }
 
   const editor = useEditor(

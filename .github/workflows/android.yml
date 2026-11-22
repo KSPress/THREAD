@@ -6,6 +6,10 @@
 # Without them a throwaway key is generated (uninstall before installing a newer build).
 name: Android app
 
+env:
+  VITE_THREAD_GOOGLE_WEB_CLIENT_ID: ${{ vars.THREAD_GOOGLE_WEB_CLIENT_ID }}
+  VITE_THREAD_GOOGLE_DESKTOP_CLIENT_ID: ${{ vars.THREAD_GOOGLE_DESKTOP_CLIENT_ID }}
+
 on:
   push:
     branches: [main, 'claude/**']
@@ -52,6 +56,7 @@ jobs:
       - name: Generate the Android project
         run: |
           npx tauri android init --ci
+          node scripts/prepare-android-google.mjs
           npx tauri icon src-tauri/app-icon.png
           # Exports are written to Download/THREAD; Android 9 and older need this permission.
           sed -i 's#<application#<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />\n    <application android:requestLegacyExternalStorage="true"#' \

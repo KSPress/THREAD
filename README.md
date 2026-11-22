@@ -171,7 +171,7 @@ npm run build          # production web build in dist/
 
 ### Updates
 
-The browser version on GitHub Pages is the update source for everything:
+Successful pushes to the default branch publish the browser build and update manifest to GitHub Pages after tests and type checks pass. Set **Settings → Pages → Build and deployment → Source** to **GitHub Actions** once to enable publishing.
 
 - **Browser / installed web app**: while it's open, THREAD checks for a newer build and shows **A newer THREAD is ready → Update now**. Open edits are saved before it reloads.
 - **Desktop and Android apps**: at launch THREAD loads the newest published build when you're online, so changes appear without reinstalling. It runs inside the app, so your vault, settings and native features (folders, notifications, Google sign-in) are unchanged. Offline, or if the site can't be reached, the app starts the build it shipped with. **Make it yours → Updates** shows the running build, has **Check for updates**, and can turn this off.
@@ -183,7 +183,7 @@ The browser version on GitHub Pages is the update source for everything:
 | --- | --- |
 | Windows, macOS, Linux | Actions → **Desktop installers** → Artifacts |
 | Android | Actions → **Android app** → Artifacts → `THREAD.apk` |
-| Browser (any device) | https://kspress.github.io/THREAD/, published by **Web app (GitHub Pages)**. One-time setup: Settings → Pages → Deploy from a branch → `gh-pages` / root. |
+| Browser (any device) | https://kspress.github.io/THREAD/, published by **Web app (GitHub Pages)**. |
 
 ### Phones and tablets
 
@@ -206,14 +206,19 @@ Desktop adds:
 - native notifications
 - Pandoc typesetting, if `pandoc` is on `PATH`
 
-### Google setup (once, for Calendar and Drive)
+### Connecting Google Drive
 
-1. In console.cloud.google.com, create a project and enable the **Google Calendar API** and the **Google Drive API**.
-2. On the OAuth consent screen, choose External, add yourself as a test user, and add the scopes `calendar.app.created` and `drive.file`. Both are narrow: THREAD only sees calendars and files it created.
-3. Create an OAuth client:
-   - **Browser / PWA**: type *Web application*, with the origin you serve THREAD from as an authorized JavaScript origin (for GitHub Pages: `https://kspress.github.io`).
-   - **Desktop and Android apps**: type *Desktop app*. Sign-in opens in your system browser and returns through a loopback redirect, using PKCE.
-4. In THREAD, tap **Sign in with Google** on the welcome screen (or open **Make it yours → Google Calendar**) and paste the client ID (plus the client secret for the apps). One sign-in covers both Calendar and Drive. **Make it yours → Google Drive → Keep this vault in Google Drive** links the open vault.
+Choose **Connect Google Drive** on the welcome screen, select your Google account, and choose a vault. To link a vault you already have open, use **Make it yours → Google Drive → Keep this vault in Google Drive**. Google Calendar asks for permission separately under **Make it yours → Google Calendar**.
+
+#### Google Cloud setup for release maintainers
+
+Enable the Drive API in Thread’s Google Cloud project and configure its OAuth consent screen. Use the `drive.file` scope for Drive. If offering Calendar reminders, enable the Calendar API and add `calendar.app.created` as well. Add test accounts while the consent screen is in testing.
+
+- **Web / PWA**. Create a Web application client with `https://kspress.github.io` as an authorized JavaScript origin. Put its client ID in the GitHub Actions repository variable `THREAD_GOOGLE_WEB_CLIENT_ID`.
+- **Desktop**. Create a Desktop app client in the same project. Save its client ID in the repository variable `THREAD_GOOGLE_DESKTOP_CLIENT_ID` and its client secret in the Actions secret `THREAD_GOOGLE_DESKTOP_CLIENT_SECRET`. The secret is built only into the native installer. Build a new installer after setting it.
+- **Android**. Register an Android client for `com.kspress.thread` with the SHA-1 of the certificate that signs the distributed APK. Set `ANDROID_KEYSTORE_BASE64` and `ANDROID_KEYSTORE_PASSWORD` so release APKs use that same certificate. One-off APKs signed with a temporary key cannot use this registration. Google Play services handles authorization in the APK. For a local Android build, run `node scripts/prepare-android-google.mjs` after `npx tauri android init`.
+
+Self-hosted web and desktop builds can still configure a custom client under **Make it yours → Google Calendar → Advanced Google client configuration**.
 
 If you'd rather not create an OAuth client, run a Loom and subscribe from Google Calendar to `https://<loom>/calendar.ics?token=…` (*Other calendars → From URL*). Set `LOOM_APP_URL` so events link back to THREAD.
 
@@ -222,10 +227,12 @@ If you'd rather not create an OAuth client, run a Loom and subscribe from Google
 A vault can live in a folder in your Google Drive instead of (or as well as) on a Loom:
 
 - **Make it yours → Google Drive → Keep this vault in Google Drive** puts it in *My Drive › THREAD › <vault name>*: Projects and sub-threads become folders, Threads stay `.md` files, Cords `.cord`, PDFs and images stay themselves, and THREAD's own data sits in `.thread/`. Because they're plain files, the folder is readable from Drive and from Obsidian through Drive for desktop.
-- On another device, **Sign in with Google** on the welcome screen; your Drive vaults appear under **Choose a vault** (marked *In Google Drive*). Pick one. THREAD keeps a local copy, so it works offline and syncs when it's back online.
+- On another device, choose **Connect Google Drive** on the welcome screen. Your Drive vaults appear under **Choose a vault** (marked *In Google Drive*). THREAD keeps a local copy for offline use and syncs it when back online.
 - Sync runs a few seconds after you stop typing, when Drive reports a change (checked every minute), when THREAD goes to the background, and every ten minutes. The cloud dot in the Spool shows the state; click it to sync now.
 - Edits on one side are copied across, and deletions too (unless the other side changed the file). If the same file changed on two devices between syncs, nothing is lost: the Drive version keeps the name and this device's version is saved beside it as `Name (conflict Android 3f2a 2026-10-29 1405).md`.
 - Live, character-by-character merging of the same Thread open on two devices at once still needs a Loom. Drive sync works file by file.
+- Open a Markdown Thread and use the Canvas cloud button to compare the text on this device with the current copy in Drive. Checking the versions does not change either file.
+- To keep a separate backup, choose **Make it yours → Vault → Download vault backup**. The ZIP contains the folder structure, Markdown, Cords, attachments, and `.thread/` metadata from this device. To reopen it as a folder vault, extract it into a new folder and choose **Open a folder** on desktop or in a browser with folder access.
 
 ### The Loom (Host)
 

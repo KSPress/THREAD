@@ -7,7 +7,8 @@ import { Icon } from './Icon'
 import { useEffect, useState } from 'react'
 import { connectGoogle, disconnectGoogle, syncGoogle, useGcal } from '../core/gcal'
 import { notificationPermission, requestNotifications, showNotification } from '../core/notify'
-import { isTauri } from '../core/vault'
+import { isDesktopApp, isTauri } from '../core/vault'
+import { googleConfigured, usesAndroidGoogle } from '../core/google'
 import { applyUpdate, BUILD, buildLabel, checkForUpdate, runningLive, useUpdate } from '../core/update'
 import { connectDrive, disconnectDrive, syncNow, useDrive } from '../core/gdrive'
 
@@ -60,6 +61,7 @@ export function SettingsPanel() {
   const detail = useStore((s) => s.loomDetail)
   const connectLoom = useStore((s) => s.connectLoom)
   const adapter = useStore((s) => s.adapter)
+  const [backingUp, setBackingUp] = useState(false)
   // Escape closes, like every other overlay.
   useEffect(() => {
     if (!open) return
@@ -70,6 +72,19 @@ export function SettingsPanel() {
   if (!open) return null
 
   const close = () => set({ settingsOpen: false })
+  const backup = async () => {
+    if (!adapter) return
+    setBackingUp(true)
+    const { notify } = useStore.getState()
+    try {
+      const { downloadVaultBackup } = await import('../core/backup')
+      if (await downloadVaultBackup(adapter)) notify('Vault backup exported.')
+    } catch (error) {
+      notify(`Vault backup failed: ${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      setBackingUp(false)
+    }
+  }
 
   const uploadBackground = () => {
     const input = document.createElement('input')
@@ -270,11 +285,15 @@ export function SettingsPanel() {
           </div>
 
           <h3>Vault</h3>
+          <p className="muted">Download a ZIP of this device’s vault, including Markdown, Cords, attachments, and Thread metadata.</p>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <span className="mono" style={{ fontSize: 12 }}>
               {adapter?.name} · {adapter?.kind === 'tauri' ? 'native folder' : adapter?.kind === 'folder' ? 'browser folder access' : 'browser storage'}
             </span>
             <span className="spacer" />
+            <button className="btn" disabled={!adapter || backingUp} onClick={() => void backup()}>
+              <Icon name="download" size={14} /> {backingUp ? 'Preparing backup…' : 'Download vault backup'}
+            </button>
             <button className="btn" onClick={() => st.reset()}>
               Reset look
             </button>
@@ -315,7 +334,7 @@ function CalendarSettings() {
   useEffect(() => {
     void notificationPermission().then(setPerm)
   }, [])
-  const desktop = isTauri() // desktop and Android apps use the loopback OAuth flow
+  const desktop = isDesktopApp()
   const feed = loomUrl ? `${loomUrl.replace(/\/$/, '')}/calendar.ics?token=${encodeURIComponent(loomToken)}` : ''
 
   return (
@@ -375,7 +394,9 @@ function CalendarSettings() {
       <p className="muted" style={{ marginTop: -4, fontSize: 13 }}>
         Deadlines go into a calendar THREAD creates for itself. THREAD can only see calendars it made, never the rest of your Google Calendar.
       </p>
-      <div className="settings__grid">
+      {!usesAndroidGoogle() && <details>
+        <summary>Advanced Google client configuration</summary>
+        <div className="settings__grid">
         <input
           className="input"
           placeholder={desktop ? 'OAuth client ID (Desktop app)' : 'OAuth client ID (Web application)'}
@@ -387,12 +408,13 @@ function CalendarSettings() {
         ) : (
           <input className="input" placeholder="Calendar name" value={st.gcalCalendarName} onChange={(e) => st.set({ gcalCalendarName: e.target.value })} />
         )}
-      </div>
+        </div>
+      </details>}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
         {g.status === 'disconnected' || g.status === 'error' || g.status === 'expired' ? (
           <button
             className="btn btn--ink"
-            disabled={!st.gcalClientId || busy}
+            disabled={!googleConfigured() || busy}
             onClick={async () => {
               setBusy(true)
               try {
@@ -489,9 +511,9 @@ function UpdateSettings() {
           Running {buildLabel(BUILD)} · {where}
         </span>
         <span className="spacer" />
-        {u.status === 'available' && u.remote ? (
-          <button className="btn btn--accent" onClick={() => void applyUpdate()}>
-            <Icon name="sync" size={14} /> Update to {u.remote.commit}
+        {(u.status === 'available' || u.status === 'applying') && u.remote ? (
+          <button className="btn btn--accent" disabled={u.status === 'applying'} onClick={() => void applyUpdate()}>
+            <Icon name="sync" size={14} /> {u.status === 'applying' ? 'Saving…' : `Update to ${u.remote.commit}`}
           </button>
         ) : (
           <button className="btn" disabled={u.status === 'checking'} onClick={() => void checkForUpdate()}>
@@ -501,7 +523,7 @@ function UpdateSettings() {
       </div>
       {u.checkedAt && u.status !== 'checking' && (
         <p className="mono muted" style={{ fontSize: 11, marginTop: 6 }}>
-          {u.status === 'current' ? 'Up to date.' : u.status === 'offline' ? 'Could not reach the update server.' : u.remote ? `New: ${buildLabel(u.remote)}` : ''}
+          {u.error ?? (u.status === 'current' ? 'Up to date.' : u.status === 'offline' ? 'Could not reach the update server.' : u.remote ? `New: ${buildLabel(u.remote)}` : '')}
         </p>
       )}
       {app && (
@@ -518,7 +540,7 @@ function UpdateSettings() {
 
 function DriveSettings() {
   const d = useDrive()
-  const st = useSettings()
+  useSettings((s) => s.gcalClientId)
   const [busy, setBusy] = useState(false)
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true)
@@ -537,8 +559,7 @@ function DriveSettings() {
       <h3>Google Drive</h3>
       <p className="muted" style={{ marginTop: -4, fontSize: 13 }}>
         Keep this vault in a folder in your Google Drive — Projects and sub-threads as folders, Threads as .md files — and open it on any device. It works
-        without a Loom. THREAD only sees the files it puts there, never the rest of your Drive. Uses the Google client ID above (turn on the Google Drive API
-        in the same Google Cloud project).
+        without a Loom. THREAD requests access to the files it creates or that you open with THREAD.
       </p>
       {d.folder ? (
         <>
@@ -588,11 +609,11 @@ function DriveSettings() {
           </div>
         </>
       ) : (
-        <button className="btn btn--ink" disabled={busy || !st.gcalClientId} onClick={() => void run(connectDrive)}>
+        <button className="btn btn--ink" disabled={busy || !googleConfigured()} onClick={() => void run(connectDrive)}>
           <Icon name="cloud" size={14} /> {busy ? 'Connecting…' : 'Keep this vault in Google Drive'}
         </button>
       )}
-      {!st.gcalClientId && <p className="muted" style={{ fontSize: 12 }}>Add your Google OAuth client ID in Google Calendar above first.</p>}
+      {!googleConfigured() && <p className="muted" style={{ fontSize: 12 }}>Google Drive is unavailable in this build.</p>}
     </>
   )
 }

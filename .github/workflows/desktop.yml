@@ -54,6 +54,11 @@ jobs:
       - run: npm ci
 
       - name: Build installers
+        env:
+          VITE_THREAD_GOOGLE_WEB_CLIENT_ID: ${{ vars.THREAD_GOOGLE_WEB_CLIENT_ID }}
+          VITE_THREAD_GOOGLE_DESKTOP_CLIENT_ID: ${{ vars.THREAD_GOOGLE_DESKTOP_CLIENT_ID }}
+          THREAD_GOOGLE_DESKTOP_CLIENT_ID: ${{ vars.THREAD_GOOGLE_DESKTOP_CLIENT_ID }}
+          THREAD_GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.THREAD_GOOGLE_DESKTOP_CLIENT_SECRET }}
         run: npx tauri build ${{ matrix.args }}
 
       - uses: actions/upload-artifact@v4

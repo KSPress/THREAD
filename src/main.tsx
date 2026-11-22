@@ -17,16 +17,15 @@ import './styles/app.css'
 import { App } from './App'
 import { BASE } from './core/base'
 
-// Excalidraw (Pinboards) loads its fonts from here; served locally for offline use.
-;(window as any).EXCALIDRAW_ASSET_PATH = `${BASE}excalidraw/`
-
-// Installable, offline-capable PWA on phones/tablets (not inside the desktop app).
-if (import.meta.env.PROD && 'serviceWorker' in navigator && !('__TAURI_INTERNALS__' in window)) {
-  window.addEventListener('load', () => void navigator.serviceWorker.register(`${BASE}sw.js`))
+export function mountThread() {
+  // Excalidraw (Pinboards) loads its fonts relative to the running build.
+  ;(window as any).EXCALIDRAW_ASSET_PATH = `${BASE}excalidraw/`
+  if (import.meta.env.PROD && 'serviceWorker' in navigator && !('__TAURI_INTERNALS__' in window)) {
+    void navigator.serviceWorker.register(`${BASE}sw.js`).catch((err) => console.warn('[thread] Offline setup failed', err))
+  }
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  )
 }
-
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)

@@ -1,23 +1,28 @@
-# Builds the browser version and publishes it to GitHub Pages (branch gh-pages).
-# One-time: Settings → Pages → "Deploy from a branch" → gh-pages / (root).
+# Publishes the shared browser and native live build from the default branch.
+# One-time: Settings → Pages → Build and deployment → Source → GitHub Actions.
 # Then THREAD lives at https://<owner>.github.io/<repo>/ and installs as an app
 # from the browser menu on Android, iPhone, iPad, Windows and macOS.
 name: Web app (GitHub Pages)
 
+env:
+  VITE_THREAD_GOOGLE_WEB_CLIENT_ID: ${{ vars.THREAD_GOOGLE_WEB_CLIENT_ID }}
+  VITE_THREAD_GOOGLE_DESKTOP_CLIENT_ID: ${{ vars.THREAD_GOOGLE_DESKTOP_CLIENT_ID }}
+
 on:
   push:
-    branches: [main, 'claude/**']
+    branches: ['**']
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  publish:
+  build:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,11 +34,20 @@ jobs:
       - run: npm test
       # Relative asset paths, so the same build serves /<repo>/ and is the live
       # build the desktop and Android apps update from (version.json).
-      - run: npx vite build
-      - uses: peaceiris/actions-gh-pages@v4
+      - run: npm run build
+      - uses: actions/upload-pages-artifact@v4
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dist
-          publish_branch: gh-pages
-          force_orphan: true
-          commit_message: 'Publish THREAD web app'
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment

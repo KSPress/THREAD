@@ -1,13 +1,14 @@
-// The first screen: sign in with Google (Calendar + Drive), then pick a vault
+// The first screen: optionally connect Google Drive, then pick a vault
 // from one list — the sample world, vaults kept on this device, folders,
 // Loom Satellites and vaults kept in Google Drive — or make/connect a new one.
 import { useEffect, useState } from 'react'
 import { lastVault, openAdapter, pickFolder, reopenFolder } from '../core/boot'
 import { useSettings } from '../core/settings'
-import { BrowserVault, FolderVault, isDesktopApp, isTauri, TauriVault } from '../core/vault'
+import { BrowserVault, FolderVault, isDesktopApp, TauriVault } from '../core/vault'
 import { forgetVault, knownVaults, type KnownVault } from '../core/vaults'
 import type { DriveFile } from '../core/drive'
-import { anyGoogleSignIn, signInGoogle, signOutGoogle, useGoogleAccount } from '../core/googleAccount'
+import { driveSignedIn, signInDrive, signOutDrive } from '../core/gdrive'
+import { googleConfigured } from '../core/google'
 import { Icon } from './Icon'
 import { Logo } from './Logo'
 
@@ -19,8 +20,7 @@ export function Welcome() {
   const [vaults, setVaults] = useState<KnownVault[]>([])
   const [drive, setDrive] = useState<DriveFile[] | null>(null)
   const [adding, setAdding] = useState<null | 'new' | 'loom'>(null)
-  const google = useGoogleAccount()
-  const signedIn = google.signedIn || anyGoogleSignIn()
+  const [signedIn, setSignedIn] = useState(driveSignedIn)
   const canPick = isDesktopApp() || FolderVault.supported()
   const last = lastVault()
 
@@ -82,21 +82,29 @@ export function Welcome() {
           <section className="welcome__step">
             <div className="welcome__step-head">
               <span className="welcome__num">1</span>
-              <b>Google</b>
+              <b>Google Drive</b>
               <small>optional</small>
             </div>
             {signedIn ? (
               <div className="welcome__google is-on">
                 <Icon name="cloud" size={18} />
                 <span>
-                  Signed in — Calendar reminders and Google Drive vaults are ready.
+                  Google Drive connected
                 </span>
-                <button className="chip-btn" onClick={() => signOutGoogle()}>
+                <button className="chip-btn" onClick={() => { signOutDrive(); setSignedIn(false) }}>
                   Sign out
                 </button>
               </div>
             ) : (
-              <GoogleSignIn busy={busy || google.busy} onSignIn={() => run(signInGoogle)} />
+              <div className="welcome__google">
+                <button className="btn btn--google" disabled={busy || !googleConfigured()} onClick={() => void run(async () => {
+                  await signInDrive()
+                  setSignedIn(true)
+                })}>
+                  <GoogleG /> Connect Google Drive
+                </button>
+                <small>{googleConfigured() ? 'Open a Drive vault on any device, or choose a local vault below.' : 'Google Drive is unavailable in this build. You can still use a local vault below.'}</small>
+              </div>
             )}
           </section>
 
@@ -199,47 +207,6 @@ function VaultRow({ v, busy, onOpen, onForget }: { v: KnownVault; busy: boolean;
         </button>
       )}
     </div>
-  )
-}
-
-function GoogleSignIn({ busy, onSignIn }: { busy: boolean; onSignIn: () => void }) {
-  const st = useSettings()
-  const [setup, setSetup] = useState(false)
-  if (!setup)
-    return (
-      <div className="welcome__google">
-        <button className="btn btn--google" disabled={busy} onClick={() => (st.gcalClientId ? onSignIn() : setSetup(true))}>
-          <GoogleG /> Sign in with Google
-        </button>
-        <small>For deadline reminders in Google Calendar and vaults kept in Google Drive. THREAD only sees what it creates.</small>
-        <button className="chip-btn" onClick={() => setSetup(true)}>
-          Client ID…
-        </button>
-      </div>
-    )
-  return (
-    <form
-      className="welcome__google welcome__google--setup"
-      onSubmit={(e) => {
-        e.preventDefault()
-        setSetup(false)
-        onSignIn()
-      }}
-    >
-      <small>
-        Google sign-in needs your own OAuth client ID (free, about 5 minutes once — see “Google setup” in the README). Skip this if you don’t need Calendar or Drive.
-      </small>
-      <input className="input" placeholder="Google OAuth client ID" value={st.gcalClientId} onChange={(e) => st.set({ gcalClientId: e.target.value.trim() })} required />
-      {isTauri() && <input className="input" type="password" placeholder="Client secret (Desktop app client)" value={st.gcalClientSecret} onChange={(e) => st.set({ gcalClientSecret: e.target.value.trim() })} />}
-      <div className="welcome__actions">
-        <button className="btn btn--google" type="submit" disabled={busy || !st.gcalClientId}>
-          <GoogleG /> Sign in with Google
-        </button>
-        <button className="btn" type="button" onClick={() => setSetup(false)}>
-          Cancel
-        </button>
-      </div>
-    </form>
   )
 }
 

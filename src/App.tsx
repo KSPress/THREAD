@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { Icon } from './components/Icon'
 import { Backdrop } from './components/Backdrop'
 import { CommandPalette } from './components/CommandPalette'
@@ -90,6 +90,7 @@ export function App() {
       <>
         <Backdrop />
         {booting ? <div className="boot-splash" aria-label="Opening your vault" /> : <Welcome />}
+        {!booting && <UpdateBanner />}
       </>
     )
   }
@@ -129,19 +130,19 @@ export function App() {
 /** "A newer THREAD is ready" — applying it saves open edits, then reloads. */
 function UpdateBanner() {
   const u = useUpdate()
-  const [busy, setBusy] = useState(false)
-  if (u.status !== 'available' || !u.remote || u.dismissed === u.remote.id) return null
+  const busy = u.status === 'applying'
+  if ((!busy && u.status !== 'available') || !u.remote || u.dismissed === u.remote.id) return null
   return (
     <div className="update-banner" role="status">
       <Icon name="sync" size={15} />
       <span>
         <b>A newer THREAD is ready</b>
-        <small className="mono">{buildLabel(u.remote)}</small>
+        <small className="mono">{u.error ?? buildLabel(u.remote)}</small>
       </span>
-      <button className="btn btn--accent" disabled={busy} onClick={() => (setBusy(true), void applyUpdate())}>
+      <button className="btn btn--accent" disabled={busy} onClick={() => void applyUpdate()}>
         {busy ? 'Saving…' : 'Update now'}
       </button>
-      <button className="icon-btn" title="Later" onClick={() => useUpdate.setState({ dismissed: u.remote!.id })}>
+      <button className="icon-btn" title="Later" disabled={busy} onClick={() => useUpdate.setState({ dismissed: u.remote!.id })}>
         <Icon name="close" size={14} />
       </button>
     </div>

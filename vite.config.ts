@@ -21,7 +21,8 @@ function versionFile(): Plugin {
     apply: 'build',
     generateBundle(_opts, bundle) {
       const entry = Object.values(bundle).find((c) => c.type === 'chunk' && c.isEntry)
-      this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ ...BUILD, entry: entry?.fileName }) + '\n' })
+      if (!entry) throw new Error('THREAD is missing its update entry')
+      this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ ...BUILD, entry: entry.fileName, liveProtocol: 1 }) + '\n' })
     },
   }
 }

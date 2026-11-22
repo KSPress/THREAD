@@ -7,6 +7,7 @@ const MIME: Record<string, string> = {
   md: 'text/markdown',
   epub: 'application/epub+zip',
   ics: 'text/calendar',
+  zip: 'application/zip',
 }
 
 /** Save bytes through the native dialog (Tauri) or a browser download. */

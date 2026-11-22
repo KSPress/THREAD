@@ -77,8 +77,48 @@ fn token_request(form: &[(&str, &str)]) -> Result<Value, String> {
     }
 }
 
+fn desktop_secret(client_id: &str, custom: String) -> String {
+    if custom.is_empty() && option_env!("THREAD_GOOGLE_DESKTOP_CLIENT_ID") == Some(client_id) {
+        option_env!("THREAD_GOOGLE_DESKTOP_CLIENT_SECRET").unwrap_or_default().to_owned()
+    } else {
+        custom
+    }
+}
+
+#[cfg(target_os = "android")]
+pub fn android_plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
+    use tauri::Manager;
+    tauri::plugin::Builder::new("thread-google")
+        .setup(|app, api| {
+            app.manage(api.register_android_plugin("com.kspress.thread", "ThreadGooglePlugin")?);
+            Ok(())
+        })
+        .build()
+}
+
+#[tauri::command]
+pub async fn google_android_authorize(app: tauri::AppHandle, scope: String, interactive: bool) -> Result<String, String> {
+    #[cfg(target_os = "android")]
+    {
+        use tauri::Manager;
+        let plugin = app.state::<tauri::plugin::PluginHandle<tauri::Wry>>();
+        let result: Value = plugin
+            .run_mobile_plugin_async("authorize", serde_json::json!({ "scope": scope, "interactive": interactive }))
+            .await
+            .map_err(|e| e.to_string())?;
+        result.get("accessToken").and_then(Value::as_str).map(str::to_owned)
+            .ok_or_else(|| "Google did not return an access token.".to_string())
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = (app, scope, interactive);
+        Err("Android authorization is only available in the Thread APK.".into())
+    }
+}
+
 #[tauri::command]
 pub async fn google_oauth_start(app: tauri::AppHandle, client_id: String, client_secret: String, scope: String) -> Result<Value, String> {
+    let client_secret = desktop_secret(&client_id, client_secret);
     let verifier = random_b64(48)?;
     let state = random_b64(16)?;
     let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| e.to_string())?;
@@ -150,6 +190,7 @@ pub async fn google_oauth_start(app: tauri::AppHandle, client_id: String, client
 
 #[tauri::command]
 pub async fn google_oauth_refresh(client_id: String, client_secret: String, refresh_token: String) -> Result<Value, String> {
+    let client_secret = desktop_secret(&client_id, client_secret);
     tauri::async_runtime::spawn_blocking(move || {
         let mut form = vec![("client_id", client_id.as_str()), ("refresh_token", refresh_token.as_str()), ("grant_type", "refresh_token")];
         if !client_secret.is_empty() {

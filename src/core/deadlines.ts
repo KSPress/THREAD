@@ -55,7 +55,7 @@ export function reminderTimes(d: Deadline): number[] {
   const due = new Date(d.due).getTime()
   return d.reminders.map((m) => {
     // An all-day "at the time" reminder fires at 09:00 on the day, not midnight.
-    if (d.allDay && m === 0) return due + 9 * 3600000
+    if (d.allDay && m === 0) return new Date(due).setHours(9, 0, 0, 0)
     return due - m * 60000
   })
 }

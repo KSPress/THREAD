@@ -5838,3 +5838,50 @@ button.dye:hover {
     max-height: none;
   }
 }
+.drive-comparison {
+  width: min(56rem, calc(100% - 2rem));
+  max-height: 85vh;
+  padding: 1.25rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--paper);
+  color: var(--ink);
+}
+.drive-comparison::backdrop {
+  background: rgb(0 0 0 / 55%);
+}
+.drive-comparison header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+.drive-comparison h3,
+.drive-comparison h4 {
+  margin: 0;
+}
+.drive-comparison header p {
+  overflow-wrap: anywhere;
+}
+.drive-comparison__versions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+.drive-comparison pre {
+  max-height: 48vh;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+}
+@media (max-width: 600px) {
+  .drive-comparison__versions {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+  .drive-comparison pre {
+    max-height: 24vh;
+  }
+}
