@@ -1,6 +1,6 @@
 // Google Drive sync between two devices, against an in-memory fake Drive.
 import 'fake-indexeddb/auto'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { FOLDER_MIME, syncDrive, type DriveApi, type DriveFile, type DriveLink } from '../src/core/drive'
 import { BrowserVault } from '../src/core/vault'
 
@@ -226,7 +226,6 @@ describe('Google Drive in the app', () => {
     const { signInDrive } = await import('../src/core/gdrive')
     const { useSettings } = await import('../src/core/settings')
     const { DRIVE_SCOPE } = await import('../src/core/drive')
-    const { vi } = await import('vitest')
     const previous = useSettings.getState().gcalClientId
     useSettings.getState().set({ gcalClientId: '' })
     vi.stubEnv('VITE_THREAD_GOOGLE_WEB_CLIENT_ID', 'release-client.apps.googleusercontent.com')
@@ -247,6 +246,28 @@ describe('Google Drive in the app', () => {
       sessionStorage.removeItem('thread.gdrive.token')
       useSettings.getState().set({ gcalClientId: previous })
       vi.unstubAllEnvs()
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('keeps a previously configured Drive login working on an APK without the native bridge', async () => {
+    const { signInDrive } = await import('../src/core/gdrive')
+    const { useSettings } = await import('../src/core/settings')
+    const previous = useSettings.getState().gcalClientId
+    useSettings.getState().set({ gcalClientId: 'existing-desktop-client' })
+    const invoke = vi.fn(async (command: string) => {
+      if (command === 'google_android_authorize') throw new Error('Command google_android_authorize not found')
+      return { access_token: 'legacy-token', expires_in: 3600, refresh_token: 'legacy-refresh' }
+    })
+    vi.stubGlobal('navigator', { userAgent: 'Android' })
+    vi.stubGlobal('__TAURI_INTERNALS__', { invoke })
+    try {
+      await signInDrive()
+      expect(invoke.mock.calls.map(([command]) => command)).toEqual(['google_android_authorize', 'google_oauth_start'])
+      expect(localStorage.getItem('thread.gdrive.token')).toContain('legacy-refresh')
+    } finally {
+      localStorage.removeItem('thread.gdrive.token')
+      useSettings.getState().set({ gcalClientId: previous })
       vi.unstubAllGlobals()
     }
   })

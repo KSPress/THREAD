@@ -16,6 +16,7 @@ function googleClient() {
 }
 
 export const googleConfigured = () => usesAndroidGoogle() || !!googleClient().clientId
+class OldAndroidAppError extends Error {}
 
 async function androidToken(scope: string, interactive: boolean): Promise<GoogleToken> {
   const { invoke } = await import('@tauri-apps/api/core')
@@ -23,8 +24,10 @@ async function androidToken(scope: string, interactive: boolean): Promise<Google
     const access_token = await invoke<string>('google_android_authorize', { scope, interactive })
     return { access_token, expires_at: Date.now() + 45 * 60_000 }
   } catch (error) {
+    if (/google_android_authorize.*not found/i.test(String(error))) {
+      throw new OldAndroidAppError('Install the latest Thread APK to connect Google Drive.')
+    }
     if (!interactive) throw new GoogleAuthError()
-    if (String(error).includes('not found')) throw new Error('Install the latest Thread APK to connect Google Drive.')
     throw error
   }
 }
@@ -81,7 +84,14 @@ export function createGoogleAuth(opts: { key: string; scope: string; what: strin
 
   /** Must be called from a user gesture (it opens Google's consent page). */
   const connect = async () => {
-    if (usesAndroidGoogle()) return save(await androidToken(opts.scope, true))
+    if (usesAndroidGoogle()) {
+      try {
+        return save(await androidToken(opts.scope, true))
+      } catch (error) {
+        // A live frontend can run in an APK released before the native bridge.
+        if (!(error instanceof OldAndroidAppError) || !useSettings.getState().gcalClientId) throw error
+      }
+    }
     const { clientId, clientSecret } = googleClient()
     if (!clientId) throw new Error('Google Drive or Calendar is unavailable in this build. You can still use a local vault.')
     let token: GoogleToken
@@ -120,10 +130,14 @@ export function createGoogleAuth(opts: { key: string; scope: string; what: strin
     const t = load()
     if (!t) throw new GoogleAuthError(opts.what)
     if (t.expires_at > Date.now() + 60_000) return t.access_token
-    if (usesAndroidGoogle()) {
-      const next = await androidToken(opts.scope, false)
-      save(next)
-      return next.access_token
+    if (usesAndroidGoogle() && !t.refresh_token) {
+      try {
+        const next = await androidToken(opts.scope, false)
+        save(next)
+        return next.access_token
+      } catch {
+        throw new GoogleAuthError(opts.what)
+      }
     }
     if (t.refresh_token && isTauri()) {
       const { clientId, clientSecret } = googleClient()
