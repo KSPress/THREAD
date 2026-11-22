@@ -15,6 +15,8 @@ import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.AuthorizationResult
 import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.common.api.Scope
+import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.CommonStatusCodes
 
 @Keep
 @InvokeArg
@@ -54,21 +56,39 @@ class ThreadGooglePlugin(private val activity: Activity) : Plugin(activity) {
                 }
             }
         }.addOnFailureListener { error ->
-            invoke.reject(error.localizedMessage ?: "Google authorization failed.")
+            invoke.reject(authorizationError(error))
         }
     }
 
     @ActivityCallback
     fun authorized(invoke: Invoke, result: ActivityResult) {
-        if (result.resultCode != Activity.RESULT_OK) {
-            invoke.reject("Google authorization was cancelled.")
+        if (result.data == null) {
+            val message = if (result.resultCode == Activity.RESULT_CANCELED) {
+                "Google returned without authorizing Thread. If you didn’t dismiss the prompt, this APK may need to be registered for Google Drive."
+            } else {
+                "Google did not return an authorization result."
+            }
+            invoke.reject(message)
             return
         }
         try {
             finish(invoke, client.getAuthorizationResultFromIntent(result.data))
         } catch (error: Exception) {
-            invoke.reject(error.localizedMessage ?: "Google authorization failed.")
+            invoke.reject(authorizationError(error))
         }
+    }
+
+    private fun authorizationError(error: Exception): String {
+        if (error is ApiException) {
+            return when (error.statusCode) {
+                CommonStatusCodes.DEVELOPER_ERROR ->
+                    "Google Drive setup is incomplete for this APK. Thread needs an Android OAuth client that matches its signing certificate."
+                CommonStatusCodes.CANCELED ->
+                    "Google closed the authorization prompt before granting access."
+                else -> "Google authorization failed (code ${error.statusCode})."
+            }
+        }
+        return error.localizedMessage ?: "Google authorization failed."
     }
 
     private fun finish(invoke: Invoke, result: AuthorizationResult) {

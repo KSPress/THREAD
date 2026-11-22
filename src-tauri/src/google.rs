@@ -101,6 +101,9 @@ pub async fn google_android_authorize(app: tauri::AppHandle, scope: String, inte
     #[cfg(target_os = "android")]
     {
         use tauri::Manager;
+        if option_env!("THREAD_ANDROID_SIGNING").is_some_and(|signing| signing == "preview") {
+            return Err("This preview APK uses a temporary signing key. Google Drive requires a registered Thread release APK.".into());
+        }
         let plugin = app.state::<tauri::plugin::PluginHandle<tauri::Wry>>();
         let result: Value = plugin
             .run_mobile_plugin_async("authorize", serde_json::json!({ "scope": scope, "interactive": interactive }))

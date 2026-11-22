@@ -63,6 +63,8 @@ jobs:
             src-tauri/gen/android/app/src/main/AndroidManifest.xml
 
       - name: Build APK
+        env:
+          THREAD_ANDROID_SIGNING: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && secrets.ANDROID_KEYSTORE_PASSWORD != '' && 'release' || 'preview' }}
         run: npx tauri android build --apk --target aarch64 --target armv7 --target x86_64
 
       - name: Sign APK
@@ -73,7 +75,7 @@ jobs:
           set -e
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
           UNSIGNED=$(find src-tauri/gen/android/app/build/outputs/apk -name '*-unsigned.apk' | head -1)
-          if [ -n "$KEYSTORE_B64" ]; then
+          if [ -n "$KEYSTORE_B64" ] && [ -n "$KEYSTORE_PASS" ]; then
             echo "$KEYSTORE_B64" | base64 -d > thread.jks
             PASS="$KEYSTORE_PASS"
           else
