@@ -1,5 +1,7 @@
 # THREAD
 
+**[Download THREAD for Android (APK)](https://github.com/KSPress/THREAD/releases/latest/download/THREAD.apk)**
+
 A local-first, Core/Host workspace for worldbuilders and writers. It takes Notion's relational blocks, Obsidian's plain-file resilience, Word-grade publishing and Scrivener's manuscript binding, and puts them in one modular, tactile interface.
 
 `docs/DESIGN.md` is the design document this build follows. The reference boards it cites are in `docs/references/`.
@@ -177,12 +179,12 @@ Successful pushes to the default branch publish the browser build and update man
 - **Desktop and Android apps**: at launch THREAD loads the newest published build when you're online, so changes appear without reinstalling. It runs inside the app, so your vault, settings and native features (folders, notifications, Google sign-in) are unchanged. Offline, or if the site can't be reached, the app starts the build it shipped with. **Make it yours → Updates** shows the running build, has **Check for updates**, and can turn this off.
 - Changes to the native (Rust) side still need a new installer from the downloads below. Apps installed before this feature need that one reinstall to get the updater.
 
-### Downloads (built automatically on every push)
+### Downloads
 
 | Platform | Where |
 | --- | --- |
 | Windows, macOS, Linux | Actions → **Desktop installers** → Artifacts |
-| Android | Actions → **Android app** → Artifacts → `THREAD.apk` |
+| Android | [Download the release-signed APK](https://github.com/KSPress/THREAD/releases/latest/download/THREAD.apk) |
 | Browser (any device) | https://kspress.github.io/THREAD/, published by **Web app (GitHub Pages)**. |
 
 ### Phones and tablets
